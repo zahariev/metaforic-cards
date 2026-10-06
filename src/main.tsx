@@ -5,6 +5,7 @@ import {
   Routes,
   Route,
   Link,
+  NavLink,
   useParams,
   useNavigate,
 } from "react-router-dom";
@@ -144,10 +145,10 @@ function App() {
               ["/notes", "Моите записки", NotebookPen],
               ["/favorites", "Любими", Heart],
             ].map(([path, label, Icon]) => (
-              <Link key={String(path)} to={String(path)}>
+              <NavLink key={String(path)} to={String(path)} end={path === "/"} className={({isActive})=>isActive?"active":""}>
                 {React.createElement(Icon as typeof Home, { size: 18 })}
                 {String(label)}
-              </Link>
+              </NavLink>
             ))}
           </nav>
           <div className="aside-bottom">

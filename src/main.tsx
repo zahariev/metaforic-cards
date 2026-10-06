@@ -114,17 +114,13 @@ function started(d: State, base: string) {
     d.strokes.length > 0
   );
 }
-// Which decks each exercise draws from, chosen in Settings. Defaults to Diarc.
-type DeckChoice = Record<string, string[]>;
+// Which deck each exercise draws from, chosen in Settings. Defaults to Diarc.
+type DeckChoice = Record<string, string>;
 const DECK_CHOICE = "mc-exercise-decks";
-const deckKeys = (choice: DeckChoice, base: string) => {
-  const keys = (choice[base] ?? []).filter((k) => decks.some((d) => d.key === k));
-  return keys.length ? keys : [decks[0].key];
-};
-const exerciseCards = (base: string) => {
-  const keys = deckKeys(read<DeckChoice>(DECK_CHOICE, {}), base);
-  return decks.filter((d) => keys.includes(d.key)).flatMap((d) => d.ids);
-};
+const deckFor = (choice: DeckChoice, base: string) =>
+  decks.find((d) => d.key === choice[base]) ?? decks[0];
+const exerciseCards = (base: string) =>
+  deckFor(read<DeckChoice>(DECK_CHOICE, {}), base).ids;
 const initial = (cards = deck): State => ({
   stage: 0,
   topic: "",
@@ -299,6 +295,18 @@ function Library({ home = false }: { home?: boolean }) {
   };
   const count = (i: number) =>
     library.filter((e) => e.category === i && !e.adaptation).length;
+  // Exercises with a saved draft that hasn't been finished yet.
+  const [unfinished] = useState(
+    () =>
+      new Set(
+        library
+          .filter((e) => {
+            const d = read<State | null>("mc-draft-" + e.id, null);
+            return !!d && !d.done && started({ ...initial(), ...d }, e.id.split("-")[0]);
+          })
+          .map((e) => e.id),
+      ),
+  );
   const shown = library.filter(
     (e) =>
       (cat < 0 || e.category === cat) &&
@@ -385,9 +393,17 @@ function Library({ home = false }: { home?: boolean }) {
                 src={`${import.meta.env.BASE_URL}cards/${[3, 17, 29, 8, 44, 21, 12][i % 7]}.jpg`}
                 alt=""
               />
-              <span className={`tag c${e.category}`}>
-                {e.adaptation ? "Адаптация" : categories[e.category].title}
-              </span>
+              {/* The category is already clear from the active filter. */}
+              {(cat < 0 || e.adaptation) && (
+                <span className={`tag c${e.category}`}>
+                  {e.adaptation ? "Адаптация" : categories[e.category].title}
+                </span>
+              )}
+              {unfinished.has(e.id) && (
+                <span className="unfinished-badge">
+                  <NotebookPen size={12} /> Незавършено
+                </span>
+              )}
             </div>
             <div className="tile-copy">
               <small>{e.mechanic}</small>
@@ -439,6 +455,8 @@ function Deck({
   inspect: (id: number) => void;
   ids?: number[];
 }) {
+  // Called before the early return: /deck and /favorites share this component instance.
+  const [tab, setTab] = useLocal("mc-deck-tab", 0, (v) => !decks[v]);
   if (ids) {
     return (
       <div className="library">
@@ -458,7 +476,6 @@ function Deck({
       </div>
     );
   }
-  const [tab, setTab] = useLocal("mc-deck-tab", 0, (v) => !decks[v]);
   const current = decks[tab];
   return (
     <div className="library">
@@ -602,64 +619,39 @@ function storedKeys() {
 }
 function DeckSettings() {
   const [choice, setChoice] = useLocal<DeckChoice>(DECK_CHOICE, {});
-  const toggle = (base: string, key: string) =>
-    setChoice((c) => {
-      const keys = deckKeys(c, base);
-      const next = keys.includes(key)
-        ? keys.filter((k) => k !== key)
-        : [...keys, key];
-      return next.length ? { ...c, [base]: next } : c;
-    });
-  const setAll = (keys: string[]) =>
-    setChoice(Object.fromEntries(exercises.map((e) => [e.id, keys])));
+  const setAll = (key: string) =>
+    setChoice(Object.fromEntries(exercises.map((e) => [e.id, key])));
   return (
     <section className="settings-card">
       <h2>Карти за упражненията</h2>
-      <p>
-        Избери от коя колода да се теглят картите във всяко упражнение. Може да
-        са и двете.
-      </p>
+      <p>Избери от коя колода да се теглят картите във всяко упражнение.</p>
       <div className="row deck-all">
         <span>За всички:</span>
         {decks.map((d) => (
-          <button key={d.key} className="secondary" onClick={() => setAll([d.key])}>
+          <button key={d.key} className="secondary" onClick={() => setAll(d.key)}>
             {d.title}
           </button>
         ))}
-        <button
-          className="secondary"
-          onClick={() => setAll(decks.map((d) => d.key))}
-        >
-          Двете
-        </button>
       </div>
       <ul className="deck-bindings">
         {exercises.map((e) => {
-          const keys = deckKeys(choice, e.id);
+          const current = deckFor(choice, e.id);
           return (
             <li key={e.id}>
               <span>{e.title}</span>
-              <div className="deck-toggles">
-                {decks.map((d) => {
-                  const on = keys.includes(d.key);
-                  return (
-                    <button
-                      key={d.key}
-                      className={on ? "on" : ""}
-                      aria-pressed={on}
-                      disabled={on && keys.length === 1}
-                      title={
-                        on && keys.length === 1
-                          ? "Нужна е поне една колода"
-                          : undefined
-                      }
-                      onClick={() => toggle(e.id, d.key)}
-                    >
-                      <img src={d.cover} alt="" />
-                      {d.title}
-                    </button>
-                  );
-                })}
+              <div className="deck-toggles" role="radiogroup" aria-label={e.title}>
+                {decks.map((d) => (
+                  <button
+                    key={d.key}
+                    role="radio"
+                    aria-checked={d === current}
+                    className={d === current ? "on" : ""}
+                    onClick={() => setChoice((c) => ({ ...c, [e.id]: d.key }))}
+                  >
+                    <img src={d.cover} alt="" />
+                    {d.title}
+                  </button>
+                ))}
               </div>
             </li>
           );
@@ -1306,14 +1298,28 @@ function ExerciseWorkspace({
         update({ pool: remaining, winners });
       } else if (winners.length === 1) {
         update({ selected: winners, pool: [], stage: 2 });
-      } else
-        update({ pool: shuffle(winners), winners: [], round: s.round + 1 });
+      } else update({ pool: [], winners });
     };
+    // The round has ended: pause on the kept cards before starting the next one.
+    const roundOver = s.stage === 1 && !s.pool.length && s.winners.length > 1;
+    const nextRound = () =>
+      update({ pool: shuffle(s.winners), winners: [], round: s.round + 1 });
     const three = s.pool.slice(0, 3);
+    // Picking a card moves straight on, after a short pause to show the choice.
+    const choose = (id: number) => {
+      if (three.includes(choice)) return;
+      setChoice(id);
+      setTimeout(() => {
+        pick(id);
+        setChoice(0);
+      }, 350);
+    };
     progress = <StepLine current={Math.min(s.stage, 2) + 1} total={3} />;
     lead =
       s.stage === 0 ? (
         "Формулирай въпроса, с който искаш да стигнеш до същността."
+      ) : roundOver ? (
+        `Кръг ${s.round} завърши. Картите, които запази, продължават в следващия кръг.`
       ) : s.stage === 1 ? (
         <>
           Погледни трите карти. Коя от тях най-много резонира с въпроса?
@@ -1329,23 +1335,56 @@ function ExerciseWorkspace({
           {topic()}
           {next("Разбъркай и започни", !s.topic.trim())}
         </div>
+      ) : roundOver ? (
+        <div className="board board-side">
+          <div className="round-end">
+            <p className="remaining">
+              <Layers size={15} />
+              <span>
+                Кръг {s.round} завърши · запазени <b>{s.winners.length}</b> карти
+              </span>
+            </p>
+            <div className="spread deck-spread">
+              {s.winners.map((id) => (
+                <Card key={id} id={id} onClick={() => inspect(id)} />
+              ))}
+            </div>
+            {next(`Започни кръг ${s.round + 1}`, false, nextRound)}
+          </div>
+          <div className="side-panel">
+            <h3>Въпрос на този етап:</h3>
+            <p className="question-box">{s.topic}</p>
+            <p className="note-box">
+              В кръг {s.round + 1} ще избираш отново по една от три, само сред
+              тези {s.winners.length} карти.
+            </p>
+          </div>
+        </div>
       ) : s.stage === 1 ? (
         <div className="board board-side">
           <div>
+            <p className="remaining">
+              <Layers size={15} />
+              <span>
+                Остават <b>{s.pool.length}</b> карти
+              </span>
+              <span>Кръг {s.round}</span>
+            </p>
             <div className="tournament">
               {three.map((id) => (
                 <div className="radio-card" key={id}>
                   <Card
                     id={id}
                     selected={choice === id}
-                    onClick={() => setChoice(id)}
+                    onClick={() => choose(id)}
                   />
                   <input
                     type="radio"
                     name="essence"
                     checked={choice === id}
-                    onChange={() => setChoice(id)}
-                    aria-label={`Карта ${id}`}
+                    onChange={() => choose(id)}
+                    tabIndex={-1}
+                    aria-hidden
                   />
                 </div>
               ))}
@@ -1363,14 +1402,9 @@ function ExerciseWorkspace({
             <h3>Въпрос на този етап:</h3>
             <p className="question-box">{s.topic}</p>
             <p className="note-box">
-              Кръг {s.round} · остават {s.pool.length + s.winners.length}{" "}
-              карти. След избора ти ще продължим с нови три карти, за да
-              стигнем до най-същественото.
+              Щом избереш карта, продължаваме с нови три, за да стигнем до
+              най-същественото.
             </p>
-            {next("Продължи", !three.includes(choice), () => {
-              pick(choice);
-              setChoice(0);
-            })}
           </div>
         </div>
       ) : (
@@ -1680,81 +1714,87 @@ function ExerciseWorkspace({
       );
   } else if (base === "story") {
     const total = ex.category === 1 ? 8 : s.people;
+    const players = ex.category === 1 ? 2 : s.people;
+    // The shuffled pool is the deal; it is committed when the first card is turned.
+    const dealt = s.selected.length > 0;
+    const cards = dealt ? s.selected : s.pool.slice(0, total);
+    lead =
+      s.turn < total
+        ? "Картите са скрити. Редувайте се и запазвайте вече разказаното."
+        : "Историята е готова. Дайте ѝ заглавие.";
     content = (
       <>
-        {s.stage === 0 ? (
+        {!dealt && ex.category !== 1 && people()}
+        <div className="story-cards">
+          {cards.map((id, i) => (
+            <div key={i}>
+              <small>{i === total - 1 ? "ФИНАЛ" : `Ход ${i + 1}`}</small>
+              <Card
+                id={id}
+                hidden={i > s.turn || (i === s.turn && !s.revealed)}
+                onClick={() => {
+                  if (i !== s.turn) return;
+                  if (!dealt)
+                    update({
+                      selected: cards,
+                      pool: s.pool.slice(total),
+                      revealed: true,
+                    });
+                  else update({ revealed: true });
+                }}
+              />
+            </div>
+          ))}
+        </div>
+        {s.lines.length > 0 && (
+          <div className="paper story-text">
+            {s.lines.map((l, i) => (
+              <p key={i}>
+                <small>Участник {(i % players) + 1}</small>
+                {l}
+              </p>
+            ))}
+          </div>
+        )}
+        {s.turn < total ? (
           <>
-            {ex.category !== 1 && people()}
-            <p>
-              Картите са скрити. Редувайте се и запазвайте вече разказаното.
-            </p>
-            {next("Раздай картите", false, () =>
-              update({
-                selected: s.pool.slice(0, total),
-                pool: s.pool.slice(total),
-                stage: 1,
-              }),
+            <h2>
+              Участник {(s.turn % players) + 1} ·{" "}
+              {s.turn === 0
+                ? "Започни историята"
+                : s.turn === total - 1
+                  ? "Завърши историята"
+                  : "Продължи историята"}
+            </h2>
+            {s.revealed ? (
+              <>
+                {field(
+                  "Текущ_разказ",
+                  "Добави 2–3 изречения, вдъхновени от новата карта.",
+                )}
+                {next(
+                  "Запази този ход",
+                  !s.answers["Текущ_разказ"]?.trim(),
+                  () =>
+                    update({
+                      lines: [...s.lines, s.answers["Текущ_разказ"]],
+                      answers: { ...s.answers, Текущ_разказ: "" },
+                      turn: s.turn + 1,
+                      revealed: false,
+                    }),
+                )}
+              </>
+            ) : (
+              <p className="hint">
+                Натисни картата за ход {s.turn + 1}, за да я обърнеш.
+              </p>
             )}
           </>
         ) : (
           <>
-            <div className="story-cards">
-              {s.selected.map((id, i) => (
-                <div key={i}>
-                  <small>{i === total - 1 ? "ФИНАЛ" : `Ход ${i + 1}`}</small>
-                  <Card
-                    id={id}
-                    hidden={i > s.turn || (i === s.turn && !s.revealed)}
-                    onClick={() => i === s.turn && update({ revealed: true })}
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="paper story-text">
-              {s.lines.map((l, i) => (
-                <p key={i}>
-                  <small>
-                    Участник {(i % (ex.category === 1 ? 2 : s.people)) + 1}
-                  </small>
-                  {l}
-                </p>
-              ))}
-            </div>
-            {s.turn < total ? (
-              <>
-                <h2>
-                  Участник {(s.turn % (ex.category === 1 ? 2 : s.people)) + 1} ·{" "}
-                  {s.turn === total - 1
-                    ? "Завърши историята"
-                    : "Продължи историята"}
-                </h2>
-                {s.revealed && (
-                  <>
-                    {field(
-                      "Текущ_разказ",
-                      "Добави 2–3 изречения, вдъхновени от новата карта.",
-                    )}
-                    {next(
-                      "Запази този ход",
-                      !s.answers["Текущ_разказ"]?.trim(),
-                      () =>
-                        update({
-                          lines: [...s.lines, s.answers["Текущ_разказ"]],
-                          answers: { ...s.answers, Текущ_разказ: "" },
-                          turn: s.turn + 1,
-                          revealed: false,
-                        }),
-                    )}
-                  </>
-                )}
-              </>
-            ) : (
-              <>
-                {field("Заглавие", "Как ще се казва историята?")}
-                {field("Обрат", "Кой обрат те изненада най-много?")}
-                {finish()}
-              </>
-            )}
+            {field("Заглавие", "Как ще се казва историята?")}
+            {field("Обрат", "Кой обрат те изненада най-много?")}
+            {finish()}
           </>
         )}
       </>

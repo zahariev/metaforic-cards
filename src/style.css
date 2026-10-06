@@ -415,6 +415,21 @@ main {
   padding: 5px 9px;
   border-radius: 15px;
 }
+.unfinished-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border-radius: 15px;
+  background: #b64b38;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  box-shadow: 0 2px 6px #5a483430;
+}
 .tile-copy {
   padding: 19px 20px 12px;
 }
@@ -510,7 +525,17 @@ footer {
 }
 .deck-tabs {
   grid-template-columns: repeat(2, minmax(0, 280px));
-  margin-top: 24px;
+  margin-top: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  padding: 12px 0;
+  /* Full-width background with a 1px divider, without widening the page. */
+  background: #f7f4ed;
+  box-shadow:
+    0 0 0 100vmax #f7f4ed,
+    0 1px 0 100vmax #e7dfd1;
+  clip-path: inset(0 -100vmax -1px);
 }
 .deck-tabs img {
   width: 24px;
@@ -1579,6 +1604,31 @@ a:focus-visible {
 .board .tournament {
   margin: 0 auto 25px;
 }
+.remaining {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: #6b6f63;
+}
+.remaining b {
+  color: #b64b38;
+  font-size: 16px;
+}
+.round-end {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+.round-end .spread {
+  width: 100%;
+}
+.remaining span + span::before {
+  content: "·";
+  margin-right: 8px;
+}
 .radio-card {
   display: flex;
   flex-direction: column;
@@ -1883,11 +1933,6 @@ a:focus-visible {
 }
 .deck-toggles button.on img {
   opacity: 1;
-}
-.deck-toggles button:disabled {
-  cursor: default;
-  opacity: 1;
-  color: #2f5531;
 }
 .stats {
   display: grid;

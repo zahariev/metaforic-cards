@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import {
-  BrowserRouter,
+  HashRouter,
   Routes,
   Route,
   Link,
@@ -28,20 +28,53 @@ import {
   X,
   Download,
   Plus,
+  PersonStanding,
+  Send,
+  Save,
+  Trash2,
+  Upload,
+  Settings,
 } from "lucide-react";
-import { categories, library, deck, shuffle, type Exercise } from "./data";
+import {
+  categories,
+  exercises,
+  library,
+  deck,
+  decks,
+  cardSrc,
+  cardLabel,
+  shuffle,
+  type Exercise,
+} from "./data";
 import "./style.css";
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
 function read<T>(key: string, fallback: T): T {
   try {
-    return JSON.parse(localStorage.getItem(key) || "null") ?? fallback;
+    const v = JSON.parse(localStorage.getItem(key) || "null");
+    if (v === null) return fallback;
+    // Fill in fields added since the value was stored.
+    return isObject(fallback) && isObject(v) ? { ...fallback, ...v } : v;
   } catch {
     return fallback;
   }
 }
-function useLocal<T>(key: string, initial: T) {
-  const [v, set] = useState<T>(() => read(key, initial));
-  useEffect(() => {
+function write(key: string, v: unknown) {
+  try {
     localStorage.setItem(key, JSON.stringify(v));
+    return true;
+  } catch (e) {
+    console.warn("Could not save " + key, e);
+    return false;
+  }
+}
+function useLocal<T>(key: string, initial: T, stale?: (v: T) => boolean) {
+  const [v, set] = useState<T>(() => {
+    const stored = read(key, initial);
+    return stale?.(stored) ? initial : stored;
+  });
+  useEffect(() => {
+    write(key, v);
   }, [key, v]);
   return [v, set] as const;
 }
@@ -66,13 +99,38 @@ type State = {
   order: number[];
   timer: number;
   strokes: { color: string; width?: number; points: number[][] }[];
+  // Set once the exercise is saved to the notes; the next visit starts fresh.
+  done?: boolean;
 };
-const initial = (): State => ({
+const FIRST_LINE = "Какво искаш да ми покажеш?";
+// Choosing the first card alone doesn't count; writing or moving past the first step does.
+function started(d: State, base: string) {
+  return (
+    d.stage > (base === "dialogue" ? 1 : 0) ||
+    !!d.topic.trim() ||
+    Object.values(d.answers).some((v) => v?.trim()) ||
+    d.lines.some((l, i) => l.trim() && !(i === 0 && l === FIRST_LINE)) ||
+    d.words.some((w) => w?.trim()) ||
+    d.strokes.length > 0
+  );
+}
+// Which decks each exercise draws from, chosen in Settings. Defaults to Diarc.
+type DeckChoice = Record<string, string[]>;
+const DECK_CHOICE = "mc-exercise-decks";
+const deckKeys = (choice: DeckChoice, base: string) => {
+  const keys = (choice[base] ?? []).filter((k) => decks.some((d) => d.key === k));
+  return keys.length ? keys : [decks[0].key];
+};
+const exerciseCards = (base: string) => {
+  const keys = deckKeys(read<DeckChoice>(DECK_CHOICE, {}), base);
+  return decks.filter((d) => keys.includes(d.key)).flatMap((d) => d.ids);
+};
+const initial = (cards = deck): State => ({
   stage: 0,
   topic: "",
   selected: [],
   answers: {},
-  pool: shuffle(deck),
+  pool: shuffle(cards),
   winners: [],
   round: 1,
   positions: {},
@@ -106,7 +164,7 @@ function Card({
       type="button"
       className={`card ${hidden ? "back" : ""} ${selected ? "selected" : ""} ${large ? "large" : ""}`}
       onClick={onClick}
-      aria-label={hidden ? "Изтегли скрита карта" : `Карта ${id}`}
+      aria-label={hidden ? "Изтегли скрита карта" : `Карта ${cardLabel(id)}`}
     >
       {hidden ? (
         <>
@@ -115,8 +173,8 @@ function Card({
         </>
       ) : (
         <img
-          src={`/cards/${id}.jpg`}
-          alt={`Метафорична карта ${id}`}
+          src={cardSrc(id)}
+          alt={`Метафорична карта ${cardLabel(id)}`}
           draggable={false}
         />
       )}
@@ -127,7 +185,7 @@ function App() {
   const [inspect, setInspect] = useState(0);
   const [favorites, setFavorites] = useLocal<number[]>("mc-favorites", []);
   return (
-    <BrowserRouter>
+    <HashRouter>
       <div className="app">
         <aside>
           <Link className="brand" to="/">
@@ -144,6 +202,7 @@ function App() {
               ["/deck", "Колода карти", Layers],
               ["/notes", "Моите записки", NotebookPen],
               ["/favorites", "Любими", Heart],
+              ["/settings", "Настройки", Settings],
             ].map(([path, label, Icon]) => (
               <NavLink key={String(path)} to={String(path)} end={path === "/"} className={({isActive})=>isActive?"active":""}>
                 {React.createElement(Icon as typeof Home, { size: 18 })}
@@ -171,6 +230,7 @@ function App() {
               element={<Deck inspect={setInspect} ids={favorites} />}
             />
             <Route path="/notes" element={<Notes />} />
+            <Route path="/settings" element={<SettingsPage />} />
             <Route
               path="/exercise/:id"
               element={
@@ -190,7 +250,7 @@ function App() {
             >
               <X />
             </button>
-            <img src={`/cards/${inspect}.jpg`} alt={`Карта ${inspect}`} />
+            <img src={cardSrc(inspect)} alt={`Карта ${cardLabel(inspect)}`} />
             <button
               className="secondary"
               onClick={() =>
@@ -212,13 +272,33 @@ function App() {
           </div>
         </div>
       )}
-    </BrowserRouter>
+    </HashRouter>
   );
 }
 function Library({ home = false }: { home?: boolean }) {
-  const [cat, setCat] = useState(-1);
+  const [cat, setCat] = useLocal("mc-filter-category", -1);
   const [q, setQ] = useState("");
-  const [adapt, setAdapt] = useState(false);
+  const [adapt, setAdapt] = useLocal("mc-filter-adapt", false);
+  const cardsRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [scrolledPast, setScrolledPast] = useState(false);
+  useEffect(() => {
+    const el = cardsRef.current;
+    if (!el) return;
+    // The top margin matches the tabs bar, which covers that strip once shown.
+    const io = new IntersectionObserver(
+      ([e]) => setScrolledPast(!e.isIntersecting && e.boundingClientRect.top < 0),
+      { rootMargin: "-90px 0px 0px 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  const pick = (i: number) => {
+    setCat(cat === i ? -1 : i);
+    if (cat !== i) listRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+  const count = (i: number) =>
+    library.filter((e) => e.category === i && !e.adaptation).length;
   const shown = library.filter(
     (e) =>
       (cat < 0 || e.category === cat) &&
@@ -246,29 +326,47 @@ function Library({ home = false }: { home?: boolean }) {
           />
         </label>
       </div>
-      <div className="categories">
+      <div className={`tabs-bar ${scrolledPast ? "visible" : ""}`}>
+        <div className="categories tabs">
+          {categories.map((c, i) => (
+            <button
+              className={`category c${i} ${cat === i ? "active" : ""}`}
+              key={c.title}
+              onClick={() => pick(i)}
+              tabIndex={scrolledPast ? 0 : -1}
+            >
+              {React.createElement([User, Users, GroupIcon, PersonStanding][i])}
+              <h2>{c.title}</h2>
+              <em className="tab-count">{count(i)}</em>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="categories" ref={cardsRef}>
         {categories.map((c, i) => (
           <button
             className={`category c${i} ${cat === i ? "active" : ""}`}
             key={c.title}
-            onClick={() => setCat(cat === i ? -1 : i)}
+            onClick={() => pick(i)}
           >
-            {i === 0 ? <User /> : <Users />}
-            <small>{c.sub}</small>
+            {React.createElement([User, Users, GroupIcon, PersonStanding][i])}
             <h2>{c.title}</h2>
             <p>{c.text}</p>
             <span>
-              Разгледай{" "}
-              {library.filter((e) => e.category === i && !e.adaptation).length}{" "}
-              упражнения <ArrowRight size={15} />
+              Разгледай {count(i)} упражнения <ArrowRight size={15} />
             </span>
             <Leaf className="decoration" />
           </button>
         ))}
       </div>
       <div className="quote">„Една картина казва повече от хиляди думи.“</div>
-      <div className="list-heading">
+      <div className="list-heading" ref={listRef}>
         <h2>{cat < 0 ? "Избери своето упражнение" : categories[cat].title}</h2>
+        {cat >= 0 && (
+          <button className="text-button" onClick={() => setCat(-1)}>
+            <X size={13} /> Всички упражнения
+          </button>
+        )}
         <label className="toggle">
           <input
             type="checkbox"
@@ -279,12 +377,12 @@ function Library({ home = false }: { home?: boolean }) {
         </label>
         <span>{shown.length} упражнения</span>
       </div>
-      <div className="exercise-list">
+      <div className={`exercise-list ${cat < 0 ? "" : "filtered"}`}>
         {shown.map((e, i) => (
           <Link className="exercise-tile" to={`/exercise/${e.id}`} key={e.id}>
             <div className="tile-image">
               <img
-                src={`/cards/${[3, 17, 29, 8, 44, 21, 12][i % 7]}.jpg`}
+                src={`${import.meta.env.BASE_URL}cards/${[3, 17, 29, 8, 44, 21, 12][i % 7]}.jpg`}
                 alt=""
               />
               <span className={`tag c${e.category}`}>
@@ -322,28 +420,74 @@ function Library({ home = false }: { home?: boolean }) {
     </div>
   );
 }
+function GroupIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" {...props}>
+      <circle cx="12" cy="7" r="3.2" />
+      <circle cx="4.8" cy="9" r="2.5" />
+      <circle cx="19.2" cy="9" r="2.5" />
+      <path d="M6 20.5a6 6 0 0 1 12 0z" />
+      <path d="M.5 19.5a4.4 4.4 0 0 1 6.8-3.7A7.4 7.4 0 0 0 5 19.5z" />
+      <path d="M23.5 19.5a4.4 4.4 0 0 0-6.8-3.7 7.4 7.4 0 0 1 2.3 3.7z" />
+    </svg>
+  );
+}
 function Deck({
   inspect,
-  ids = deck,
+  ids,
 }: {
   inspect: (id: number) => void;
   ids?: number[];
 }) {
+  if (ids) {
+    return (
+      <div className="library">
+        <p className="eyebrow">ОБРАЗИ ЗА ТВОИТЕ АСОЦИАЦИИ</p>
+        <h1>Любими карти</h1>
+        <p>
+          {ids.length} карти · Избери изображение, за да го разгледаш отблизо.
+        </p>
+        <div className="spread deck-spread">
+          {ids.map((id) => (
+            <Card key={id} id={id} onClick={() => inspect(id)} />
+          ))}
+        </div>
+        {!ids.length && (
+          <p>Добави любими карти от увеличения изглед на изображението.</p>
+        )}
+      </div>
+    );
+  }
+  const [tab, setTab] = useLocal("mc-deck-tab", 0, (v) => !decks[v]);
+  const current = decks[tab];
   return (
     <div className="library">
       <p className="eyebrow">ОБРАЗИ ЗА ТВОИТЕ АСОЦИАЦИИ</p>
-      <h1>{ids === deck ? "Колода карти" : "Любими карти"}</h1>
+      <h1>Колода карти</h1>
       <p>
-        {ids.length} карти · Избери изображение, за да го разгледаш отблизо.
+        {current.ids.length} карти · Избери изображение, за да го разгледаш
+        отблизо.
       </p>
-      <div className="spread">
-        {ids.map((id) => (
+      <div className="categories tabs deck-tabs" role="tablist">
+        {decks.map((d, i) => (
+          <button
+            key={d.title}
+            role="tab"
+            aria-selected={tab === i}
+            className={`category c${i} ${tab === i ? "active" : ""}`}
+            onClick={() => setTab(i)}
+          >
+            <img src={d.cover} alt="" />
+            <h2>{d.title}</h2>
+            <em className="tab-count">{d.ids.length}</em>
+          </button>
+        ))}
+      </div>
+      <div className="spread deck-spread" role="tabpanel">
+        {current.ids.map((id) => (
           <Card key={id} id={id} onClick={() => inspect(id)} />
         ))}
       </div>
-      {!ids.length && (
-        <p>Добави любими карти от увеличения изглед на изображението.</p>
-      )}
     </div>
   );
 }
@@ -426,11 +570,8 @@ function Notes() {
                 <button
                   className="secondary"
                   onClick={() => {
-                    localStorage.setItem(
-                      "mc-draft-" + s.exercise,
-                      JSON.stringify(s.data),
-                    );
-                    location.href = "/exercise/" + s.exercise;
+                    write("mc-draft-" + s.exercise, s.data);
+                    location.hash = "/exercise/" + s.exercise;
                   }}
                 >
                   Отвори сесията
@@ -449,6 +590,200 @@ function Notes() {
           </article>
         ))
       )}
+    </div>
+  );
+}
+function storedKeys() {
+  try {
+    return Object.keys(localStorage).filter((k) => k.startsWith("mc-"));
+  } catch {
+    return [];
+  }
+}
+function DeckSettings() {
+  const [choice, setChoice] = useLocal<DeckChoice>(DECK_CHOICE, {});
+  const toggle = (base: string, key: string) =>
+    setChoice((c) => {
+      const keys = deckKeys(c, base);
+      const next = keys.includes(key)
+        ? keys.filter((k) => k !== key)
+        : [...keys, key];
+      return next.length ? { ...c, [base]: next } : c;
+    });
+  const setAll = (keys: string[]) =>
+    setChoice(Object.fromEntries(exercises.map((e) => [e.id, keys])));
+  return (
+    <section className="settings-card">
+      <h2>Карти за упражненията</h2>
+      <p>
+        Избери от коя колода да се теглят картите във всяко упражнение. Може да
+        са и двете.
+      </p>
+      <div className="row deck-all">
+        <span>За всички:</span>
+        {decks.map((d) => (
+          <button key={d.key} className="secondary" onClick={() => setAll([d.key])}>
+            {d.title}
+          </button>
+        ))}
+        <button
+          className="secondary"
+          onClick={() => setAll(decks.map((d) => d.key))}
+        >
+          Двете
+        </button>
+      </div>
+      <ul className="deck-bindings">
+        {exercises.map((e) => {
+          const keys = deckKeys(choice, e.id);
+          return (
+            <li key={e.id}>
+              <span>{e.title}</span>
+              <div className="deck-toggles">
+                {decks.map((d) => {
+                  const on = keys.includes(d.key);
+                  return (
+                    <button
+                      key={d.key}
+                      className={on ? "on" : ""}
+                      aria-pressed={on}
+                      disabled={on && keys.length === 1}
+                      title={
+                        on && keys.length === 1
+                          ? "Нужна е поне една колода"
+                          : undefined
+                      }
+                      onClick={() => toggle(e.id, d.key)}
+                    >
+                      <img src={d.cover} alt="" />
+                      {d.title}
+                    </button>
+                  );
+                })}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="hint">
+        Важи и за вариантите на упражнението по двойки, в група и с деца.
+        Започнато упражнение продължава със своите карти.
+      </p>
+    </section>
+  );
+}
+function SettingsPage() {
+  const keys = storedKeys();
+  const notes = read<Session[]>("mc-notes", []).length;
+  const favorites = read<number[]>("mc-favorites", []).length;
+  const drafts = keys.filter((k) => {
+    if (!k.startsWith("mc-draft-")) return false;
+    const d = read<Partial<State>>(k, {});
+    return (d.stage ?? 0) > 0 || (d.selected?.length ?? 0) > 0 || !!d.topic;
+  }).length;
+  const backup = () => {
+    const data = Object.fromEntries(keys.map((k) => [k, read(k, null)]));
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(
+      new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+    );
+    a.download = `metaforichni-karti-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  const restore = async (file: File) => {
+    try {
+      const data: unknown = JSON.parse(await file.text());
+      const entries = isObject(data)
+        ? Object.entries(data).filter(([k]) => k.startsWith("mc-"))
+        : [];
+      if (!entries.length) throw new Error("empty backup");
+      if (
+        !confirm(
+          `Да възстановя ${entries.length} записа от файла? Текущите данни със същите имена ще бъдат заменени.`,
+        )
+      )
+        return;
+      if (!entries.every(([k, v]) => write(k, v)))
+        alert("Част от данните не можаха да бъдат запазени.");
+      location.reload();
+    } catch {
+      alert("Файлът не е валидно резервно копие.");
+    }
+  };
+  const wipe = () => {
+    if (
+      !confirm(
+        "Да изтрия ли всички записки, любими карти и незавършени упражнения? Това не може да се отмени.",
+      )
+    )
+      return;
+    keys.forEach((k) => localStorage.removeItem(k));
+    location.reload();
+  };
+  return (
+    <div className="library settings">
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">ТВОЕТО ПРОСТРАНСТВО</p>
+          <h1>Настройки</h1>
+          <p>
+            Всичко, което записваш, се пази само в този браузър на това
+            устройство.
+          </p>
+        </div>
+      </div>
+      <DeckSettings />
+      <section className="settings-card">
+        <h2>Твоите данни</h2>
+        <div className="stats">
+          <div>
+            <b>{notes}</b>
+            <span>записки</span>
+          </div>
+          <div>
+            <b>{favorites}</b>
+            <span>любими карти</span>
+          </div>
+          <div>
+            <b>{drafts}</b>
+            <span>упражнения в процес</span>
+          </div>
+        </div>
+        <div className="row">
+          <button className="primary" onClick={backup}>
+            <Download size={16} /> Изтегли резервно копие
+          </button>
+          <label className="secondary">
+            <Upload size={16} /> Възстанови от файл
+            <input
+              type="file"
+              accept="application/json,.json"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) restore(f);
+                e.target.value = "";
+              }}
+            />
+          </label>
+        </div>
+        <p className="hint">
+          Резервното копие съдържа записките, любимите карти и незавършените
+          упражнения. С него можеш да пренесеш данните си на друго устройство
+          или в друг браузър.
+        </p>
+      </section>
+      <section className="settings-card">
+        <h2>Изчисти всичко</h2>
+        <p>
+          Изтрива всички записки, любими карти и незавършени упражнения от този
+          браузър.
+        </p>
+        <button className="secondary danger" onClick={wipe}>
+          <Trash2 size={16} /> Изтрий всички данни
+        </button>
+      </section>
     </div>
   );
 }
@@ -472,8 +807,21 @@ function ExerciseWorkspace({
   inspect: (id: number) => void;
 }) {
   const base = ex.id.split("-")[0];
-  const [s, set] = useLocal<State>("mc-draft-" + ex.id, initial());
+  const [cards] = useState(() => exerciseCards(base));
+  const key = "mc-draft-" + ex.id;
+  const [resumed, setResumed] = useState(() => {
+    const d = read<State>(key, initial(cards));
+    return !d.done && started(d, base);
+  });
+  // Saved or not-yet-started drafts reopen at the first step: choosing a card.
+  const [s, set] = useLocal<State>(
+    key,
+    initial(cards),
+    (d) => !!d.done || !started(d, base),
+  );
   const [saved, setSaved] = useState(false);
+  const [choice, setChoice] = useState(0);
+  const [draftLine, setDraftLine] = useState("");
   const update = (v: Partial<State>) => set((p) => ({ ...p, ...v }));
   const answer = (key: string, v: string) =>
     set((p) => ({ ...p, answers: { ...p.answers, [key]: v } }));
@@ -503,18 +851,22 @@ function ExerciseWorkspace({
   );
   const save = () => {
     const notes = read<Session[]>("mc-notes", []);
-    localStorage.setItem(
-      "mc-notes",
-      JSON.stringify([
-        {
-          id: crypto.randomUUID(),
-          exercise: ex.id,
-          date: new Date().toISOString(),
-          data: s,
-        },
-        ...notes,
-      ]),
-    );
+    const ok = write("mc-notes", [
+      {
+        id: crypto.randomUUID(),
+        exercise: ex.id,
+        date: new Date().toISOString(),
+        data: s,
+      },
+      ...notes,
+    ]);
+    if (ok) update({ done: true });
+    if (!ok) {
+      alert(
+        "Упражнението не можа да бъде запазено – паметта на браузъра е пълна. Изтрий стари записки или ги изтегли.",
+      );
+      return;
+    }
     setSaved(true);
   };
   const finish = () => (
@@ -536,7 +888,7 @@ function ExerciseWorkspace({
     count = 1,
     hidden = false,
     custom?: (id: number) => void,
-    ids = hidden ? s.pool : deck,
+    ids = hidden ? s.pool : cards,
   ) => (
     <>
       <div className="spread">
@@ -637,7 +989,7 @@ function ExerciseWorkspace({
     </label>
   );
   const deal = (n: number) => {
-    const pool = shuffle(deck);
+    const pool = shuffle(cards);
     const hands = Array.from({ length: s.people }, (_, i) =>
       pool.slice(i * n, (i + 1) * n),
     );
@@ -650,6 +1002,16 @@ function ExerciseWorkspace({
     });
   };
   let content: React.ReactNode;
+  let lead: React.ReactNode = ex.description;
+  let progress: React.ReactNode = null;
+  let reset = {
+    label: "Отначало",
+    ask: "Започни това упражнение отначало?",
+    run: () => {
+      set(initial(cards));
+      setSaved(false);
+    },
+  };
   if (
     (base === "now" && ex.category > 0) ||
     (base === "bridge" && ex.category === 2) ||
@@ -666,192 +1028,276 @@ function ExerciseWorkspace({
         people={people}
         inspect={inspect}
         finish={finish}
+        cards={cards}
       />
     );
   } else if (base === "now" || base === "challenge") {
-    const prompts =
+    const steps: {
+      title: string;
+      questions: string[];
+      sentences?: string[];
+      choice?: boolean;
+    }[] =
       base === "now"
         ? [
-            "Какво те привлече в нея?",
-            "Какво се случва в изображението?",
-            "Каква е атмосферата?",
-            "Какво усещане предизвиква у теб?",
-            "Кое в картата най-силно отразява настоящото ти състояние?",
-            "Има ли детайл, образ или усещане, в което разпознаваш нещо от себе си?",
-            "Има ли нещо, което не си осъзнавал преди да я избереш?",
-            "Довърши: Точно сега се чувствам… / В момента най-много ме занимава… / Забелязвам, че… / Имам нужда от… / Иска ми се…",
-            "Кое от това, което откри, е най-важно за теб точно сега?",
+            {
+              title: "Погледни картата",
+              questions: [
+                "Какво те привлече в нея?",
+                "Какво се случва в изображението?",
+                "Каква е атмосферата?",
+                "Какво усещане предизвиква у теб?",
+              ],
+            },
+            {
+              title: "Открий себе си в нея",
+              questions: [
+                "Кое в картата най-силно отразява настоящото ти състояние?",
+                "Има ли детайл, образ или усещане, в което разпознаваш нещо от себе си?",
+                "Има ли нещо, което не си осъзнавал преди да я избереш?",
+              ],
+            },
+            {
+              title: "Довърши изреченията",
+              questions: [],
+              sentences: [
+                "Точно сега се чувствам…",
+                "В момента най-много ме занимава…",
+                "Забелязвам, че…",
+                "Имам нужда от…",
+                "Иска ми се…",
+              ],
+            },
+            {
+              title: "Най-важното",
+              questions: [
+                "Кое от това, което откри, е най-важно за теб точно сега?",
+              ],
+            },
           ]
         : [
-            "Какво в нея те отблъсква?",
-            "Какво чувство предизвиква у теб?",
-            "Какво ти се иска да избегнеш в този образ?",
-            "Отвъд това, което те отблъсква, дразни или плаши, има ли нещо, което можеш да интерпретираш по различен начин?",
-            "Има ли нещо, което дори ти допада?",
-            "Тази карта все още ли би била последната, която би избрал?",
+            {
+              title: "Погледни картата",
+              questions: [
+                "Какво в нея те отблъсква?",
+                "Какво чувство предизвиква у теб?",
+                "Какво ти се иска да избегнеш в този образ?",
+              ],
+            },
+            {
+              title: "Друга гледна точка",
+              questions: [
+                "Отвъд това, което те отблъсква, дразни или плаши, има ли нещо, което можеш да интерпретираш по различен начин?",
+                "Има ли нещо, което дори ти допада?",
+              ],
+            },
+            {
+              title: "Отново избор",
+              questions: [
+                "Тази карта все още ли би била последната, която би избрал?",
+              ],
+              choice: true,
+            },
           ];
-    content =
-      s.stage === 0 ? (
-        <>
-          <h2>
-            {base === "now"
-              ? "Избери карта, която най-добре представя как се чувстваш в момента."
-              : "Коя карта най-малко би искал да избереш?"}
-          </h2>
-          {choose()}{" "}
-          {s.selected.length > 0 && (
-            <div className="selection-bar">
-              <Card id={s.selected[0]} onClick={() => inspect(s.selected[0])} />
-              <span>Разгледай картата преди да потвърдиш.</span>
-              {next("Избирам тази карта")}
-            </div>
-          )}
-        </>
-      ) : (
-        <div className="focused">
-          {selected()}
-          <div className="paper">
-            <p className="eyebrow">
-              ПОГЛЕДНИ КАРТАТА · {Math.min(s.stage, prompts.length)} /{" "}
-              {prompts.length}
-            </p>
-            {s.stage <= prompts.length ? (
-              <>
-                {field(prompts[s.stage - 1], prompts[s.stage - 1])}
-                {base === "challenge" && s.stage === prompts.length && (
-                  <div className="row">
-                    {["Да", "Не", "Не съм сигурен"].map((v) => (
-                      <button
-                        className={
-                          s.answers["Избор"] === v ? "primary" : "secondary"
-                        }
-                        onClick={() => answer("Избор", v)}
-                        key={v}
-                      >
-                        {v}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div className="actions">
-                  <button
-                    className="secondary"
-                    onClick={() => update({ stage: Math.max(0, s.stage - 1) })}
-                  >
-                    Назад
-                  </button>
-                  {next()}
-                </div>
-              </>
-            ) : (
-              finish()
+    const step = Math.min(s.stage, steps.length);
+    const current = steps[step];
+    const card = s.selected[0];
+    progress = <StepCount current={step + 1} total={steps.length + 1} />;
+    lead =
+      step === 0
+        ? base === "now"
+          ? "Избери карта, която най-силно те привлича в този момент."
+          : "Избери картата, която най-малко би искал да избереш."
+        : current
+          ? "Остани с избраната карта и потърси своите отговори."
+          : "Отдели момент за това, което искаш да вземеш със себе си.";
+    const panel = (
+      <div className="side-panel">
+        {current ? (
+          <>
+            <h3>{current.title}</h3>
+            {current.questions.length > 0 && (
+              <ul className="questions">
+                {current.questions.map((q) => (
+                  <li key={q}>{q}</li>
+                ))}
+              </ul>
             )}
+            {current.sentences ? (
+              current.sentences.map((t) => (
+                <label className="mini-field" key={t}>
+                  {t}
+                  <input
+                    value={s.answers[t] || ""}
+                    onChange={(e) => answer(t, e.target.value)}
+                  />
+                </label>
+              ))
+            ) : (
+              <textarea
+                value={s.answers[current.title] || ""}
+                onChange={(e) => answer(current.title, e.target.value)}
+                placeholder="Запиши своите мисли тук…"
+              />
+            )}
+            {current.choice && (
+              <div className="row">
+                {["Да", "Не", "Не съм сигурен"].map((v) => (
+                  <button
+                    className={
+                      s.answers["Избор"] === v ? "primary" : "secondary"
+                    }
+                    onClick={() => answer("Избор", v)}
+                    key={v}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="actions">
+              {step > 0 && (
+                <button
+                  className="secondary"
+                  onClick={() => update({ stage: step - 1 })}
+                >
+                  Назад
+                </button>
+              )}
+              {next("Продължи", !card, () => update({ stage: step + 1 }))}
+            </div>
+          </>
+        ) : (
+          <>
+            <h3>Финален размисъл</h3>
+            {finish()}
+            <button
+              className="text-button"
+              onClick={() => update({ stage: step - 1 })}
+            >
+              Назад
+            </button>
+          </>
+        )}
+      </div>
+    );
+    content =
+      step === 0 ? (
+        <div className="board board-pick">
+          <div className="pick-grid">
+            {cards.map((id) => (
+              <Card
+                key={id}
+                id={id}
+                selected={card === id}
+                onClick={() => update({ selected: [id] })}
+              />
+            ))}
           </div>
+          <Preview id={card} inspect={inspect} />
+          {panel}
+        </div>
+      ) : (
+        <div className="board board-focus">
+          <Preview id={card} inspect={inspect} />
+          {panel}
         </div>
       );
   } else if (base === "bridge") {
     const pair = ex.id.endsWith("pair");
     const n = pair ? 6 : 3;
+    const done = s.selected.length;
     const labels = [
-      "Къде съм сега",
-      "Къде искам да бъда",
-      "Какво ще ми помогне",
+      "Къде съм сега?",
+      "Къде искам да бъда?",
+      "Какво ще ми помогне?",
     ];
-    const order = pair ? [0, 2, 1, 3, 5, 4] : [0, 2, 1];
+    const hints = [
+      "Каква е настоящата ми ситуация? Как се чувствам?",
+      "Как изглежда желаното бъдеще? Как ще разбера, че съм там?",
+      "Какви ресурси, качества или стъпки ще ми помогнат?",
+    ];
+    progress = <Steps current={done >= n ? 3 : (done % 3) + 1} total={3} />;
+    lead =
+      done < n
+        ? "Изтегли по една карта за всяка позиция на моста."
+        : "Погледни трите карти като една обща картина.";
     content = (
-      <>
-        {topic()}
-        <p>
-          Изтегли първо настоящето, после желаното бъдеще. Третата карта свързва
-          двете.
-        </p>
-        <div className="bridge">
-          {order.map((i) => (
-            <section key={i}>
-              <h3>
-                {pair ? `Участник ${Math.floor(i / 3) + 1} · ` : ""}
-                {labels[i % 3]}
-              </h3>
-              {s.selected[i] ? (
-                <Card
-                  id={s.selected[i]}
-                  large
-                  onClick={() => inspect(s.selected[i])}
-                />
-              ) : (
-                <Card
-                  id={0}
-                  hidden
-                  onClick={() => {
-                    if (i === s.selected.length && s.selected.length < n)
-                      update({
-                        selected: [...s.selected, s.pool[0]],
-                        pool: s.pool.slice(1),
-                      });
-                  }}
-                />
-              )}
-              {s.selected[i] &&
-                field(
-                  labels[i % 3] + i,
-                  [
-                    "Какво в изображението ми помага да видя къде съм?",
-                    "Как искам нещата да бъдат?",
-                    "Какво ще ми помогне да стигна дотам?",
-                  ][i % 3],
-                )}
-            </section>
+      <div className="board board-side">
+        <div>
+          {Array.from({ length: n / 3 }, (_, r) => (
+            <div key={r}>
+              {pair && <p className="eyebrow">Участник {r + 1}</p>}
+              <div className="bridge-row">
+                {/* Drawn as now → future → helper, shown as now → helper → future. */}
+                {[0, 2, 1].map((k, j) => {
+                  const i = r * 3 + k;
+                  const id = s.selected[i];
+                  const key = labels[k].slice(0, -1) + i;
+                  return (
+                    <React.Fragment key={i}>
+                      {j > 0 && <ArrowRight className="bridge-arrow" />}
+                      <section
+                        className={`bridge-slot ${i === done ? "next" : ""}`}
+                      >
+                        <h3>{labels[k]}</h3>
+                        {id ? (
+                          <Card id={id} onClick={() => inspect(id)} />
+                        ) : (
+                          <Card
+                            id={0}
+                            hidden
+                            onClick={() => {
+                              if (i === done)
+                                update({
+                                  selected: [...s.selected, s.pool[0]],
+                                  pool: s.pool.slice(1),
+                                });
+                            }}
+                          />
+                        )}
+                        <textarea
+                          value={s.answers[key] || ""}
+                          onChange={(e) => answer(key, e.target.value)}
+                          placeholder={hints[k]}
+                          disabled={!id}
+                        />
+                      </section>
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            </div>
           ))}
+          {done < n && (
+            <p className="hint">
+              Следваща карта: {labels[done % 3]} · натисни нейния гръб.
+            </p>
+          )}
         </div>
-        {s.selected.length < n && (
-          <p className="hint">
-            Следваща карта: {labels[s.selected.length % 3]} · натисни нейния
-            гръб.
-          </p>
-        )}
-        {s.selected.length === n && (
-          <>
-            {field(
-              "Обща_картина",
+        <div className="side-panel">
+          <h3>Моите размисли</h3>
+          <label className="mini-field">
+            Тема
+            <input
+              value={s.topic}
+              onChange={(e) => update({ topic: e.target.value })}
+              placeholder="Тема, въпрос, ситуация…"
+            />
+          </label>
+          <textarea
+            value={s.answers["Обща_картина"] || ""}
+            onChange={(e) => answer("Обща_картина", e.target.value)}
+            placeholder={
               pair
                 ? "Какви сходства, различия и общи възможности виждате?"
-                : "Какво виждаш, когато разглеждаш трите карти като една обща картина?",
-            )}
-            {finish()}
-          </>
-        )}
-      </>
-    );
-  } else if (base === "future") {
-    content =
-      s.stage === 0 ? (
-        <>
-          <h2>Избери 5–7 карти за бъдещето, което искаш да изследваш.</h2>
-          {choose(7)}
-          {next("Подреди своята картина", s.selected.length < 5)}
-        </>
-      ) : (
-        <>
-          <h2>Подреди картите свободно върху масата.</h2>
-          <p>Премести всяка карта. Запазваме точното ѝ място.</p>
-          <Composition
-            ids={s.selected}
-            positions={s.positions}
-            setPositions={(positions) => update({ positions })}
-            inspect={inspect}
+                : "Какво виждаш, когато разглеждаш трите карти като една обща картина?"
+            }
           />
-          {field(
-            "Описание",
-            "Ако трябва да опишеш тази картина с няколко думи, кои биха били те?",
-          )}
-          {field(
-            "Заглавие",
-            "Дай заглавие на своята картина на бъдещето.",
-            "Ако бъдещето ти беше филм, как би се казвал той?",
-          )}
-          {finish()}
-        </>
-      );
+          {done === n && finish()}
+        </div>
+      </div>
+    );
   } else if (base === "essence") {
     const pick = (id: number) => {
       const winners = [...s.winners, id];
@@ -863,35 +1309,75 @@ function ExerciseWorkspace({
       } else
         update({ pool: shuffle(winners), winners: [], round: s.round + 1 });
     };
-    content =
+    const three = s.pool.slice(0, 3);
+    progress = <StepLine current={Math.min(s.stage, 2) + 1} total={3} />;
+    lead =
       s.stage === 0 ? (
-        <>
-          {topic()}
-          {next("Разбъркай и започни", !s.topic.trim())}
-        </>
+        "Формулирай въпроса, с който искаш да стигнеш до същността."
       ) : s.stage === 1 ? (
         <>
-          <p className="eyebrow">
-            КРЪГ {s.round} · {s.pool.length + s.winners.length * 3} →{" "}
-            {s.winners.length} запазени карти
-          </p>
-          <h2>Коя карта свързваш най-силно с „{s.topic}“?</h2>
-          <div className="tournament">
-            {s.pool.slice(0, 3).map((id) => (
-              <Card key={id} id={id} large onClick={() => pick(id)} />
-            ))}
-          </div>
-          <p className="hint">Избери една. Останалите отпадат от този кръг.</p>
-          <div className="winner-strip">
-            {s.winners.map((id) => (
-              <Card key={id} id={id} onClick={() => inspect(id)} />
-            ))}
-          </div>
+          Погледни трите карти. Коя от тях най-много резонира с въпроса?
+          <br />
+          Следващата стъпка ще те доближи до същността.
         </>
       ) : (
-        <div className="focused">
-          {selected()}
+        "Това е картата, която остана. Какво ти казва тя?"
+      );
+    content =
+      s.stage === 0 ? (
+        <div className="paper narrow">
+          {topic()}
+          {next("Разбъркай и започни", !s.topic.trim())}
+        </div>
+      ) : s.stage === 1 ? (
+        <div className="board board-side">
           <div>
+            <div className="tournament">
+              {three.map((id) => (
+                <div className="radio-card" key={id}>
+                  <Card
+                    id={id}
+                    selected={choice === id}
+                    onClick={() => setChoice(id)}
+                  />
+                  <input
+                    type="radio"
+                    name="essence"
+                    checked={choice === id}
+                    onChange={() => setChoice(id)}
+                    aria-label={`Карта ${id}`}
+                  />
+                </div>
+              ))}
+            </div>
+            {s.winners.length > 0 && (
+              <div className="winner-strip">
+                <small>Запазени в този кръг</small>
+                {s.winners.map((id) => (
+                  <Card key={id} id={id} onClick={() => inspect(id)} />
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="side-panel">
+            <h3>Въпрос на този етап:</h3>
+            <p className="question-box">{s.topic}</p>
+            <p className="note-box">
+              Кръг {s.round} · остават {s.pool.length + s.winners.length}{" "}
+              карти. След избора ти ще продължим с нови три карти, за да
+              стигнем до най-същественото.
+            </p>
+            {next("Продължи", !three.includes(choice), () => {
+              pick(choice);
+              setChoice(0);
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="board board-focus">
+          <Preview id={s.selected[0]} inspect={inspect} />
+          <div className="side-panel">
+            <h3>Същността</h3>
             {field("Връзка", "Как я свързваш с темата, от която тръгна?")}
             {field(
               "Нова_идея",
@@ -906,92 +1392,163 @@ function ExerciseWorkspace({
         </div>
       );
   } else if (base === "why") {
+    const ord = ["първото", "второто", "третото", "четвъртото", "петото"];
+    const w = Math.min(Math.max(s.stage, 1), 6);
+    const card = s.selected[w - 1];
+    const prev = w === 1 ? s.topic : s.answers["Отговор_" + (w - 1)];
+    const draw = (id: number) => {
+      if (!card && s.topic.trim())
+        update({
+          selected: [...s.selected.slice(0, w - 1), id],
+          pool: s.pool.filter((c) => c !== id),
+        });
+    };
+    progress = <Steps current={Math.min(w, 5)} total={5} />;
+    lead =
+      w > 5
+        ? "Върни се към темата. Кой отговор те изненада най-много?"
+        : `Избери карта за ${ord[w - 1]} „защо“ и отговори на въпроса.`;
     content = (
-      <>
-        {topic()}
-        <div className="chain">
-          {s.selected.map((id, i) => (
-            <div key={i}>
-              <p className="eyebrow">ЗАЩО {i + 1}</p>
-              <Card id={id} onClick={() => inspect(id)} />
-              <p>
-                {s.answers["Отговор_" + (i + 1)] || "Твоят следващ отговор"}
-              </p>
-              {s.selected.length === 5 && (
-                <button
-                  className={
-                    s.answers["Изненада"] === String(i)
-                      ? "primary"
-                      : "secondary"
-                  }
-                  onClick={() => answer("Изненада", String(i))}
-                >
-                  Този ме изненада
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-        {s.selected.length < 5 && (
-          <div className="focused">
-            <div>
-              {s.selected.length === 0 ||
-              s.answers["Отговор_" + s.selected.length] ? (
+      <div className="board board-why">
+        <ol className="why-list">
+          {Array.from({ length: 5 }, (_, i) => (
+            <li
+              key={i}
+              className={i + 1 === w ? "current" : i + 1 < w ? "done" : ""}
+            >
+              <span className="num">{i + 1}</span>
+              <span>Защо това е важно за мен?</span>
+              {s.selected[i] ? (
                 <Card
-                  id={0}
-                  hidden
-                  onClick={() => {
-                    if (s.topic.trim())
-                      update({
-                        selected: [...s.selected, s.pool[0]],
-                        pool: s.pool.slice(1),
-                      });
-                  }}
+                  id={s.selected[i]}
+                  onClick={() => inspect(s.selected[i])}
                 />
               ) : (
-                <Card
-                  id={s.selected.at(-1)!}
-                  large
-                  onClick={() => inspect(s.selected.at(-1)!)}
-                />
+                <span className="slot" />
               )}
-            </div>
-            <div>
-              <h2>
-                Защо „
-                {s.answers["Отговор_" + s.selected.length] ||
-                  (s.selected.length > 1
-                    ? s.answers["Отговор_" + (s.selected.length - 1)]
-                    : s.topic) ||
-                  "това"}
-                “ е важно за мен?
-              </h2>
-              {s.selected.length > 0 &&
-                field("Отговор_" + s.selected.length, "Моят отговор")}
-              {s.answers["Отговор_" + s.selected.length] && (
-                <p>
-                  Следващият въпрос започва от този отговор. Изтегли следващата
-                  карта.
+            </li>
+          ))}
+        </ol>
+        <div>
+          {w <= 5 ? (
+            <>
+              {w === 1 && !card && topic()}
+              <div className={`why-cards ${card ? "drawn" : ""}`}>
+                {card ? (
+                  <>
+                    <Card id={card} selected onClick={() => inspect(card)} />
+                    {s.pool.slice(0, 3).map((id) => (
+                      <Card key={id} id={0} hidden />
+                    ))}
+                  </>
+                ) : (
+                  s.pool
+                    .slice(0, 4)
+                    .map((id) => (
+                      <Card key={id} id={0} hidden onClick={() => draw(id)} />
+                    ))
+                )}
+              </div>
+              {!s.topic.trim() && (
+                <p className="hint">
+                  Първо запиши темата, после изтегли една от скритите карти.
                 </p>
               )}
-            </div>
+              <label className="field">
+                Защо „{prev || "това"}“ е важно за мен?
+                <textarea
+                  value={s.answers["Отговор_" + w] || ""}
+                  onChange={(e) => answer("Отговор_" + w, e.target.value)}
+                  placeholder="Запиши отговора си тук…"
+                  disabled={!card}
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              <div className="why-cards summary">
+                {s.selected.map((id, i) => (
+                  <div key={i}>
+                    <Card id={id} onClick={() => inspect(id)} />
+                    <p>{s.answers["Отговор_" + (i + 1)]}</p>
+                    <button
+                      className={
+                        s.answers["Изненада"] === String(i)
+                          ? "primary"
+                          : "secondary"
+                      }
+                      onClick={() => answer("Изненада", String(i))}
+                    >
+                      Този ме изненада
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {finish()}
+            </>
+          )}
+        </div>
+        <div className="side-panel">
+          <h3>Моята верига от отговори</h3>
+          {s.topic && <p className="small-note">Тема: {s.topic}</p>}
+          <ol className="chain-list">
+            {Array.from({ length: 5 }, (_, i) => (
+              <li key={i}>
+                <span>{i + 1}</span>
+                {s.answers["Отговор_" + (i + 1)] || "…"}
+              </li>
+            ))}
+          </ol>
+          <div className="actions">
+            {w > 1 && (
+              <button
+                className="secondary"
+                onClick={() => update({ stage: w - 1 })}
+              >
+                Назад
+              </button>
+            )}
+            {w <= 5 &&
+              next(
+                "Продължи",
+                !card || !s.answers["Отговор_" + w]?.trim(),
+                () => update({ stage: w + 1 }),
+              )}
           </div>
-        )}
-        {s.selected.length === 5 && (
-          <>
-            {field("Отговор_5", "Пети отговор")}
-            <h2>
-              Върни се към „{s.topic}“. Кой отговор те изненада най-много?
-            </h2>
-            {finish()}
-          </>
-        )}
-      </>
+        </div>
+      </div>
     );
   } else if (base === "dialogue") {
+    const inspiration = [
+      "Какво виждаш в мен?",
+      "Какво е важно да знам сега?",
+      "Какво ме спира?",
+      "Какъв съвет би ми дала?",
+      "Какво не забелязвам?",
+      "Каква е първата стъпка?",
+      "Какво още?",
+    ];
+    // Even lines are mine, odd lines are the card's.
+    const cardTurn = s.lines.length % 2 === 1;
+    const send = () => {
+      if (!draftLine.trim()) return;
+      update({ lines: [...s.lines, draftLine.trim()] });
+      setDraftLine("");
+    };
+    lead =
+      s.stage === 0
+        ? "Запиши темата си и изтегли скрита карта."
+        : "Проведи диалог с избраната карта. Пиши свободно, без да цензурираш отговорите.";
+    if (s.stage > 0)
+      reset = {
+        label: "Изчисти",
+        ask: "Да изчистя ли разговора?",
+        run: () =>
+          update({ lines: [], answers: { ...s.answers, Изречение: "" } }),
+      };
     content =
       s.stage === 0 ? (
-        <>
+        <div className="paper narrow center">
           {topic()}
           <Card
             id={0}
@@ -1001,81 +1558,125 @@ function ExerciseWorkspace({
                 selected: [s.pool[0]],
                 pool: s.pool.slice(1),
                 stage: 1,
-                lines: ["Какво искаш да ми покажеш?", ""],
+                lines: [FIRST_LINE],
               })
             }
           />
-        </>
+          <p className="hint">Натисни картата, за да я изтеглиш.</p>
+        </div>
       ) : (
-        <div className="focused">
-          {selected()}
-          <div className="paper">
-            <h2>Твоят разговор с образа</h2>
-            <p>
-              Ти пишеш и своите въпроси, и въображаемите отговори на картата.
-            </p>
-            {s.lines.map((line, i) => (
-              <label
-                className={`dialogue-line ${i % 2 ? "response" : ""}`}
-                key={i}
+        <>
+          <div className="board board-dialogue">
+            <Preview id={s.selected[0]} inspect={inspect} />
+            <div className="chat">
+              <div className="chat-lines">
+                {s.lines.map((line, i) => (
+                  <div className={`chat-row ${i % 2 ? "card-says" : ""}`} key={i}>
+                    <b>{i % 2 ? "КАРТАТА:" : "АЗ:"}</b>
+                    <textarea
+                      rows={1}
+                      value={line}
+                      onChange={(e) =>
+                        update({
+                          lines: s.lines.map((v, j) =>
+                            j === i ? e.target.value : v,
+                          ),
+                        })
+                      }
+                      placeholder={
+                        i % 2
+                          ? "Какво ти хрумва от името на картата?"
+                          : "Твоят въпрос"
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+              <form
+                className="composer"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  send();
+                }}
               >
-                <b>{i % 2 ? "КАРТАТА:" : "АЗ:"}</b>
-                <textarea
-                  value={line}
-                  onChange={(e) =>
-                    update({
-                      lines: s.lines.map((v, j) =>
-                        j === i ? e.target.value : v,
-                      ),
-                    })
-                  }
+                <span>{cardTurn ? "КАРТАТА" : "АЗ"}</span>
+                <input
+                  value={draftLine}
+                  onChange={(e) => setDraftLine(e.target.value)}
                   placeholder={
-                    i % 2
-                      ? "Какво ти хрумва от името на картата?"
-                      : "Твоят въпрос"
+                    cardTurn
+                      ? "Какво отговаря картата?…"
+                      : "Продължи диалога…"
                   }
                 />
-              </label>
-            ))}
-            <button
-              className="secondary"
-              onClick={() => update({ lines: [...s.lines, "", ""] })}
-            >
-              <Plus size={15} /> Добави реплика
-            </button>
-            <button
-              className="text-button"
-              onClick={() =>
-                update({
-                  lines: [...s.lines, "Какво още искаш да ми кажеш?", ""],
-                })
-              }
-            >
-              Въпрос за вдъхновение
-            </button>
-            <h3>
-              Отбележи изречението, което най-силно те докосна или изненада.
-            </h3>
-            {s.lines
-              .filter((_, i) => i % 2)
-              .flatMap((l) => l.split(/(?<=[.!?])\s+/))
-              .filter(Boolean)
-              .map((l, i) => (
                 <button
-                  key={i}
-                  className={
-                    s.answers["Изречение"] === l
-                      ? "sentence chosen"
-                      : "sentence"
-                  }
-                  onClick={() => answer("Изречение", l)}
+                  className="send"
+                  type="submit"
+                  aria-label="Изпрати"
+                  disabled={!draftLine.trim()}
                 >
-                  {l}
+                  <Send size={18} />
                 </button>
-              ))}
-            {finish()}
+              </form>
+            </div>
+            <div className="side-panel">
+              <h3>Въпроси за вдъхновение</h3>
+              <ol className="inspiration">
+                {inspiration.map((q) => (
+                  <li key={q}>
+                    <button
+                      onClick={() =>
+                        update({
+                          lines: cardTurn ? [...s.lines, "", q] : [...s.lines, q],
+                        })
+                      }
+                    >
+                      {q}
+                    </button>
+                  </li>
+                ))}
+              </ol>
+              <button
+                className="secondary wide"
+                onClick={save}
+                disabled={saved || s.lines.filter((l) => l.trim()).length < 2}
+              >
+                <Save size={16} />
+                {saved ? "Запазено в „Моите записки“" : "Запази разговора"}
+              </button>
+              {saved && (
+                <Link className="text-button" to="/notes">
+                  Виж записките
+                </Link>
+              )}
+            </div>
           </div>
-        </div>
+          {s.lines.some((l, i) => i % 2 && l.trim()) && (
+            <div className="paper dialogue-after">
+              <h3>
+                Отбележи изречението, което най-силно те докосна или изненада.
+              </h3>
+              {s.lines
+                .filter((_, i) => i % 2)
+                .flatMap((l) => l.split(/(?<=[.!?])\s+/))
+                .filter(Boolean)
+                .map((l, i) => (
+                  <button
+                    key={i}
+                    className={
+                      s.answers["Изречение"] === l
+                        ? "sentence chosen"
+                        : "sentence"
+                    }
+                    onClick={() => answer("Изречение", l)}
+                  >
+                    {l}
+                  </button>
+                ))}
+              {field("Финален_размисъл", "Какво откри в този разговор?")}
+            </div>
+          )}
+        </>
       );
   } else if (base === "story") {
     const total = ex.category === 1 ? 8 : s.people;
@@ -1564,13 +2165,39 @@ function ExerciseWorkspace({
       );
   } else if (base === "mission") {
     const teams = Math.ceil(s.people / 4);
+    const phases = [
+      {
+        title: "Идеи",
+        minutes: 10,
+        text: "Генерирайте поне три идеи от детайли, форми, настроение или асоциации.",
+      },
+      {
+        title: "Общо решение",
+        minutes: 5,
+        text: "Съчетайте вдъхновение от трите карти в общо решение.",
+      },
+      {
+        title: "Представяне",
+        minutes: 3,
+        text: "Представете решението. Друг отбор задава един въпрос.",
+      },
+    ];
+    const phase = phases[Math.min(s.stage, 3) - 1];
+    if (phase) progress = <Steps current={s.stage} total={3} />;
+    lead = phase
+      ? `${phase.minutes} минути · ${phase.text}`
+      : "Формулирайте общото предизвикателство и разделете участниците на отбори.";
     content =
       s.stage === 0 ? (
-        <>
+        <div className="paper narrow">
           {people()}
           {topic()}
+          <p className="hint">
+            {teams} {teams === 1 ? "отбор" : "отбора"} · всеки получава по три
+            скрити карти.
+          </p>
           {next("Раздай по три карти на отбор", !s.topic.trim(), () => {
-            const pool = shuffle(deck);
+            const pool = shuffle(cards);
             update({
               hands: Array.from({ length: teams }, (_, i) =>
                 pool.slice(i * 3, i * 3 + 3),
@@ -1579,53 +2206,69 @@ function ExerciseWorkspace({
               stage: 1,
             });
           })}
-        </>
+        </div>
       ) : (
         <>
-          <h2>Мисия: {s.topic}</h2>
-          <Timer seconds={s.stage === 1 ? 600 : s.stage === 2 ? 300 : 180} />
-          <p>
-            {s.stage === 1
-              ? "10 минути · Генерирайте поне три идеи от детайли, форми, настроение или асоциации."
-              : s.stage === 2
-                ? "5 минути · Съчетайте вдъхновение от трите карти в общо решение."
-                : "3 минути · Представете решението. Друг отбор задава един въпрос."}
-          </p>
+          <div className="mission-bar">
+            <div>
+              <small>Мисия</small>
+              <h2>{s.topic}</h2>
+            </div>
+            <Timer seconds={phase.minutes * 60} />
+          </div>
           {s.hands.map((h, i) => (
-            <section className="paper" key={i}>
-              <h2>
-                Отбор {i + 1} · участници {groupMembers(s.people, i).join(", ")}
-              </h2>
-              <div className="row">
-                {h.map((id) => (
-                  <Card key={id} id={id} onClick={() => inspect(id)} />
-                ))}
+            <section className="team" key={i}>
+              <div className="team-cards">
+                <h3>Отбор {i + 1}</h3>
+                <p className="small-note">
+                  Участници {groupMembers(s.people, i).join(", ")}
+                </p>
+                <div className="team-card-row">
+                  {h.map((id) => (
+                    <Card key={id} id={id} onClick={() => inspect(id)} />
+                  ))}
+                </div>
               </div>
-              {s.stage === 1 ? (
-                [1, 2, 3].map((j) => field(`Идея_${i}_${j}`, `Идея ${j}`))
-              ) : s.stage === 2 ? (
-                field("Решение_" + i, "Нашето общо решение")
-              ) : (
-                <>
-                  {field(
-                    "Представяне_" + i,
-                    "Как всяка карта допринесе за решението?",
-                  )}
-                  {field("Въпрос_" + i, "Един въпрос от друг отбор")}
-                  {field("Отговор_" + i, "Отговор и уточнение")}
-                </>
-              )}
+              <div className="team-work">
+                <h3>
+                  Фаза {s.stage} · {phase.title}
+                </h3>
+                {s.stage === 1 ? (
+                  [1, 2, 3].map((j) => field(`Идея_${i}_${j}`, `Идея ${j}`))
+                ) : s.stage === 2 ? (
+                  field("Решение_" + i, "Нашето общо решение")
+                ) : (
+                  <>
+                    {field(
+                      "Представяне_" + i,
+                      "Как всяка карта допринесе за решението?",
+                    )}
+                    {field("Въпрос_" + i, "Един въпрос от друг отбор")}
+                    {field("Отговор_" + i, "Отговор и уточнение")}
+                  </>
+                )}
+              </div>
             </section>
           ))}
-          {s.stage < 3
-            ? next(
+          <div className="actions">
+            {s.stage > 1 && (
+              <button
+                className="secondary"
+                onClick={() => update({ stage: s.stage - 1 })}
+              >
+                Назад
+              </button>
+            )}
+            {s.stage < 3 &&
+              next(
                 "Следваща фаза",
                 s.stage === 1 &&
                   s.hands.some((_, i) =>
                     [1, 2, 3].some((j) => !s.answers[`Идея_${i}_${j}`]?.trim()),
                   ),
-              )
-            : finish()}
+              )}
+          </div>
+          {s.stage === 3 && finish()}
         </>
       );
   } else if (base === "draw") {
@@ -1715,33 +2358,57 @@ function ExerciseWorkspace({
   }
   return (
     <div className="workspace">
-      <div className="workspace-top">
-        <Link to="/exercises">
+      <header className="exercise-header">
+        <Link className="back" to="/exercises">
           <ArrowLeft size={16} /> Към упражненията
         </Link>
-        <span>
-          <Clock size={15} />
-          {ex.time} · Запазва се автоматично
-        </span>
-        <button
-          className="text-button"
-          onClick={() => {
-            if (confirm("Започни това упражнение отначало?")) {
-              set(initial());
-              setSaved(false);
-            }
-          }}
-        >
-          Отначало
-        </button>
-      </div>
-      <header className="workspace-heading">
-        <p className="eyebrow">
-          {categories[ex.category].title} · {ex.mechanic}
-        </p>
-        <h1>{ex.title}</h1>
-        <p>{ex.description}</p>
+        <div className="exercise-title">
+          <h1>{ex.title}</h1>
+          <p>{lead}</p>
+        </div>
+        <div className="exercise-meta">
+          {progress ?? (
+            <span className="step-count">
+              <Clock size={15} />
+              {ex.time}
+            </span>
+          )}
+          <button
+            className="text-button"
+            onClick={() => {
+              if (confirm(reset.ask)) {
+                reset.run();
+                setResumed(false);
+              }
+            }}
+          >
+            {reset.label === "Изчисти" && <Trash2 size={14} />}
+            {reset.label}
+          </button>
+        </div>
       </header>
+      {resumed && (
+        <div className="resume-note">
+          <span>Продължаваш оттам, докъдето стигна последния път.</span>
+          <button
+            className="text-button"
+            onClick={() => {
+              set(initial(cards));
+              setSaved(false);
+              setResumed(false);
+            }}
+          >
+            Започни отначало
+          </button>
+          <button
+            className="resume-close"
+            onClick={() => setResumed(false)}
+            aria-label="Скрий"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
       {ex.adaptation && (
         <div className="adaptation">
           {ex.adaptation}
@@ -1770,8 +2437,77 @@ function ExerciseWorkspace({
       <div className="exercise-content">{content}</div>
       <footer>
         По „Работа с метафорични карти“, Яна Аврамова · с. {ex.page} ·
-        Значението на образа определяш ти.
+        Значението на образа определяш ти. · Отговорите се запазват
+        автоматично в този браузър.
       </footer>
+    </div>
+  );
+}
+function Steps({ current, total }: { current: number; total: number }) {
+  return (
+    <ol className="steps" aria-label={`Стъпка ${current} от ${total}`}>
+      {Array.from({ length: total }, (_, i) => (
+        <li
+          key={i}
+          className={
+            i + 1 < current ? "done" : i + 1 === current ? "current" : ""
+          }
+        >
+          {i + 1}
+        </li>
+      ))}
+    </ol>
+  );
+}
+function StepLine({ current, total }: { current: number; total: number }) {
+  return (
+    <div className="step-line">
+      <div
+        className="track"
+        style={
+          {
+            "--progress": `${((current - 1) / (total - 1)) * 100}%`,
+          } as React.CSSProperties
+        }
+      >
+        {Array.from({ length: total }, (_, i) => (
+          <i key={i} className={i < current ? "on" : ""} />
+        ))}
+      </div>
+      Стъпка {current} от {total}
+    </div>
+  );
+}
+function StepCount({ current, total }: { current: number; total: number }) {
+  return (
+    <span className="step-count">
+      <Clock size={17} />
+      {current} / {total}
+    </span>
+  );
+}
+function Preview({
+  id,
+  inspect,
+}: {
+  id?: number;
+  inspect: (id: number) => void;
+}) {
+  if (!id) return <div className="preview empty-slot">Избери карта</div>;
+  return (
+    <div className="preview">
+      <img
+        src={cardSrc(id)}
+        alt={`Метафорична карта ${cardLabel(id)}`}
+        onClick={() => inspect(id)}
+      />
+      <button
+        className="preview-expand"
+        onClick={() => inspect(id)}
+        aria-label="Разгледай отблизо"
+      >
+        <Expand size={16} />
+      </button>
     </div>
   );
 }
@@ -2348,7 +3084,7 @@ function Drawing({
             active.current = false;
           }}
         />
-        <img src={`/cards/${id}.jpg`} alt="Картата остава непроменена" />
+        <img src={cardSrc(id)} alt="Картата остава непроменена" />
       </div>
     </>
   );
@@ -2366,6 +3102,7 @@ function Adapted({
   people,
   inspect,
   finish,
+  cards,
 }: {
   ex: Exercise;
   s: State;
@@ -2374,6 +3111,7 @@ function Adapted({
   people: () => React.ReactNode;
   inspect: (id: number) => void;
   finish: () => React.ReactNode;
+  cards: number[];
 }) {
   const base = ex.id.split("-")[0];
   const count = ex.category === 1 ? 2 : s.people;
@@ -2428,7 +3166,7 @@ function Adapted({
               : "Избери своите изображения"}
         </h2>
         <div className="spread">
-          {deck.map((id) => (
+          {cards.map((id) => (
             <Card
               key={id}
               id={id}

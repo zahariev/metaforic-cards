@@ -367,29 +367,36 @@ export const adaptations: Exercise[] = [
     })),
 ];
 export const library = [...exercises, ...adaptations];
-export const deck = Array.from({ length: 55 }, (_, i) => i + 1);
-// Second deck (Pictus): ids are offset so they never clash with the first deck.
-export const PICTUS_OFFSET = 1000;
-export const pictusDeck = Array.from(
-  { length: 36 },
-  (_, i) => PICTUS_OFFSET + i + 1,
-);
-export const cardSrc = (id: number) =>
-  import.meta.env.BASE_URL +
-  (id > PICTUS_OFFSET
-    ? `cards2/${id - PICTUS_OFFSET}_Pictus.jpg`
-    : `cards/${id}.jpg`);
-export const cardLabel = (id: number) =>
-  id > PICTUS_OFFSET ? `Pictus ${id - PICTUS_OFFSET}` : `${id}`;
-export const decks = [
-  { key: "diarc", title: "Diarc", ids: deck, cover: cardSrc(deck[0]) },
+// Card ids are numbers: each deck owns a block of 1000 (Diarc 1–55,
+// Pictus 1001–1036, Yoko 2001–2015), so ids stay stable as decks are added.
+const deckDefs = [
+  { key: "diarc", title: "Diarc", count: 55, file: (n: number) => `diarc/${n}.jpg` },
   {
     key: "pictus",
     title: "Pictus",
-    ids: pictusDeck,
-    cover: `${import.meta.env.BASE_URL}cards2/deck_1.jpg`,
+    count: 36,
+    file: (n: number) => `pictus/${n}_Pictus.jpg`,
+    cover: "pictus/deck_1.jpg",
   },
+  { key: "yoko", title: "Yoko", count: 15, file: (n: number) => `yoko/YOKO_1_${n - 1}.jpg` },
 ];
+const base = import.meta.env.BASE_URL;
+const deckOf = (id: number) => deckDefs[Math.floor((id - 1) / 1000)] ?? deckDefs[0];
+export const cardSrc = (id: number) => base + deckOf(id).file(((id - 1) % 1000) + 1);
+export const cardLabel = (id: number) => {
+  const i = Math.floor((id - 1) / 1000);
+  return i > 0 ? `${deckOf(id).title} ${((id - 1) % 1000) + 1}` : `${id}`;
+};
+export const decks = deckDefs.map((d, i) => {
+  const ids = Array.from({ length: d.count }, (_, n) => i * 1000 + n + 1);
+  return {
+    key: d.key,
+    title: d.title,
+    ids,
+    cover: d.cover ? base + d.cover : cardSrc(ids[0]),
+  };
+});
+export const deck = decks[0].ids;
 export function shuffle<T>(a: T[]): T[] {
   const b = [...a];
   for (let i = b.length - 1; i > 0; i--) {

@@ -390,7 +390,7 @@ function Library({ home = false }: { home?: boolean }) {
           <Link className="exercise-tile" to={`/exercise/${e.id}`} key={e.id}>
             <div className="tile-image">
               <img
-                src={`${import.meta.env.BASE_URL}cards/${[3, 17, 29, 8, 44, 21, 12][i % 7]}.jpg`}
+                src={cardSrc([3, 17, 29, 8, 44, 21, 12][i % 7])}
                 alt=""
               />
               {/* The category is already clear from the active filter. */}

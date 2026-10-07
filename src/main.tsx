@@ -465,79 +465,81 @@ function Library({ home = false }: { home?: boolean }) {
         ))}
       </div>
       <div className="quote">{t("library.quote")}</div>
-      <div className="list-heading" ref={listRef}>
-        <h2>{cat < 0 ? t("library.choose") : categories[cat].title}</h2>
-        {cat >= 0 && (
-          <button className="text-button" onClick={() => setCat(-1)}>
-            <X size={13} /> {t("library.all")}
-          </button>
-        )}
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={adapt}
-            onChange={(e) => setAdapt(e.target.checked)}
-          />{" "}
-          {t("library.includeAdaptations")}
-        </label>
-        <span>{t("library.shown", { count: shown.length })}</span>
-      </div>
-      <div className={`exercise-list ${cat < 0 ? "" : "filtered"}`}>
-        {shown.map((e, i) => (
-          <Link
-            className="exercise-tile"
-            to={`/exercise/${e.id}`}
-            state={{ back: home ? "/" : "/exercises" }}
-            data-exercise={e.id}
-            key={e.id}
-          >
-            <div className="tile-image">
-              <img
-                src={cardSrc([3, 17, 29, 8, 44, 21, 12][i % 7])}
-                alt=""
-              />
-              {/* The category is already clear from the active filter. */}
-              {(cat < 0 || e.adaptation) && (
-                <span className={`tag c${e.category}`}>
-                  {e.adaptation ? t("library.adaptation") : categories[e.category].title}
-                </span>
-              )}
-              {unfinished.has(e.id) && (
-                <span className="unfinished-badge">
-                  <NotebookPen size={12} /> {t("library.unfinished")}
-                </span>
-              )}
-            </div>
-            <div className="tile-copy">
-              <small>{e.mechanic}</small>
-              <h3>{e.title}</h3>
-              <p>{e.description}</p>
-              <div className="metadata">
-                <span>
-                  <Users size={13} />
-                  {e.people}
-                </span>
-                <span>
-                  <Clock size={13} />
-                  {e.time}
-                </span>
-                <span>{e.cards}</span>
-              </div>
-              <div className="tile-bottom">
-                <span>{t("library.faceCards", { face: e.face })}</span>
-                <ArrowRight size={19} />
-              </div>
-            </div>
-          </Link>
-        ))}
-      </div>
-      {!shown.length && <p>{t("library.empty")}</p>}
-      <footer>
-        {t("library.footer")}
-        <div className="copyright">
-          {t("common.copyright", { year: new Date().getFullYear() })}
+      <section className="list-section">
+        <div className="list-heading" ref={listRef}>
+          <h2>{cat < 0 ? t("library.choose") : categories[cat].title}</h2>
+          {cat >= 0 && (
+            <button className="text-button" onClick={() => setCat(-1)}>
+              <X size={13} /> {t("library.all")}
+            </button>
+          )}
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={adapt}
+              onChange={(e) => setAdapt(e.target.checked)}
+            />{" "}
+            {t("library.includeAdaptations")}
+          </label>
+          <span>{t("library.shown", { count: shown.length })}</span>
         </div>
-      </footer>
+        <div className="exercise-list">
+          {shown.map((e, i) => (
+            <Link
+              className="exercise-tile"
+              to={`/exercise/${e.id}`}
+              state={{ back: home ? "/" : "/exercises" }}
+              data-exercise={e.id}
+              key={e.id}
+            >
+              <div className="tile-image">
+                <img
+                  src={cardSrc([3, 17, 29, 8, 44, 21, 12][i % 7])}
+                  alt=""
+                />
+                {/* The category is already clear from the active filter. */}
+                {(cat < 0 || e.adaptation) && (
+                  <span className={`tag c${e.category}`}>
+                    {e.adaptation ? t("library.adaptation") : categories[e.category].title}
+                  </span>
+                )}
+                {unfinished.has(e.id) && (
+                  <span className="unfinished-badge">
+                    <NotebookPen size={12} /> {t("library.unfinished")}
+                  </span>
+                )}
+              </div>
+              <div className="tile-copy">
+                <small>{e.mechanic}</small>
+                <h3>{e.title}</h3>
+                <p>{e.description}</p>
+                <div className="metadata">
+                  <span>
+                    <Users size={13} />
+                    {e.people}
+                  </span>
+                  <span>
+                    <Clock size={13} />
+                    {e.time}
+                  </span>
+                  <span>{e.cards}</span>
+                </div>
+                <div className="tile-bottom">
+                  <span>{t("library.faceCards", { face: e.face })}</span>
+                  <ArrowRight size={19} />
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+        {!shown.length && <p>{t("library.empty")}</p>}
+        <footer>
+          {t("library.footer")}
+          <div className="copyright">
+            {t("common.copyright", { year: new Date().getFullYear() })}
+          </div>
+        </footer>
+      </section>
     </div>
   );
 }

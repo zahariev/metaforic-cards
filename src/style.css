@@ -420,9 +420,16 @@ main {
   grid-template-columns: repeat(3, 1fr);
   gap: 21px;
 }
-/* Leaves room to scroll the heading to the top when few exercises match. */
-.exercise-list.filtered {
-  min-height: calc(100vh - 120px);
+/* Leaves room to scroll the heading to the top when few exercises match,
+   with the footer at the bottom of the screen rather than below it: the
+   heading's scroll margin plus the page's bottom padding. */
+.list-section {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 160px);
+}
+.list-section .exercise-list {
+  flex: 1;
   align-content: start;
 }
 .exercise-tile {
@@ -2170,6 +2177,9 @@ a:focus-visible {
 @media (max-width: 750px) {
   .list-heading {
     scroll-margin-top: 160px;
+  }
+  .list-section {
+    min-height: calc(100vh - 185px);
   }
 }
 .resume-note {

@@ -1,0 +1,873 @@
+{
+  "app": {
+    "title": "Working with Metaphorical Cards",
+    "language": "Language"
+  },
+  "common": {
+    "continue": "Continue",
+    "writeThoughts": "Write your thoughts here…",
+    "inspect": "Look closer",
+    "close": "Close",
+    "clear": "Clear",
+    "copyright": "© {{year}} Yana Avramova. All rights reserved."
+  },
+  "categories": [
+    {
+      "title": "On your own",
+      "sub": "Time for yourself",
+      "text": "Get to know yourself, sort out your thoughts and find new perspectives."
+    },
+    {
+      "title": "In pairs",
+      "sub": "A space for two",
+      "text": "Deeper conversations, active listening and mutual understanding."
+    },
+    {
+      "title": "In a group",
+      "sub": "Discovering together",
+      "text": "Ideas for teams, shared stories and common experiences."
+    },
+    {
+      "title": "With children",
+      "sub": "A world of imagination",
+      "text": "Creative, playful exercises for growth and communication."
+    }
+  ],
+  "exercises": {
+    "now": {
+      "title": "Here and now",
+      "people": "1 person",
+      "time": "10–15 min",
+      "cards": "1 card",
+      "face": "Face-up",
+      "description": "Connect with the present moment through an image that draws you in.",
+      "mechanic": "Choice and reflection"
+    },
+    "bridge": {
+      "title": "The bridge",
+      "people": "1 person",
+      "time": "15–20 min",
+      "cards": "3 cards",
+      "face": "Face-down",
+      "description": "Explore where you are, where you want to be and what will help you get there.",
+      "mechanic": "Three cards in space"
+    },
+    "future": {
+      "title": "Picture of the future",
+      "people": "1 person",
+      "time": "15–20 min",
+      "cards": "5–7 cards",
+      "face": "Face-up",
+      "description": "Create and arrange your own visual picture of the future you want.",
+      "mechanic": "Free composition"
+    },
+    "essence": {
+      "title": "To the essence",
+      "people": "1 person",
+      "time": "15–20 min",
+      "cards": "Whole deck",
+      "face": "Face-down → face-up",
+      "description": "Pick one card out of three, again and again, until only the essential remains.",
+      "mechanic": "Gradual narrowing"
+    },
+    "challenge": {
+      "title": "Challenge yourself",
+      "people": "1 person",
+      "time": "10–15 min",
+      "cards": "1 card",
+      "face": "Face-up",
+      "description": "Give your attention to the image you would least like to choose.",
+      "mechanic": "Change of perspective"
+    },
+    "why": {
+      "title": "Five whys",
+      "people": "1 person",
+      "time": "15–20 min",
+      "cards": "5 cards",
+      "face": "Face-down",
+      "description": "Each new question starts from your last answer.",
+      "mechanic": "Step-by-step chain"
+    },
+    "dialogue": {
+      "title": "Dialogue with a card",
+      "people": "1 person",
+      "time": "20–30 min",
+      "cards": "1 card",
+      "face": "Face-down",
+      "description": "Write an imaginary conversation. You write both sides.",
+      "mechanic": "Written dialogue"
+    },
+    "coffee": {
+      "title": "Over coffee",
+      "people": "2 people",
+      "time": "15–20 min",
+      "cards": "1 card each",
+      "face": "Face-up",
+      "description": "Share associations and practise attentive listening.",
+      "mechanic": "Telling and summarising"
+    },
+    "story": {
+      "title": "Once upon a time",
+      "people": "2 people",
+      "time": "15–20 min",
+      "cards": "8 cards",
+      "face": "Face-down",
+      "description": "Take turns and build a story full of unexpected twists.",
+      "mechanic": "Shared story"
+    },
+    "perspective": {
+      "title": "A matter of perspective",
+      "people": "2 people",
+      "time": "15–20 min",
+      "cards": "1 per round",
+      "face": "Face-down",
+      "description": "One image suggests a problem to one of you and a solution to the other.",
+      "mechanic": "Problem and solution"
+    },
+    "cluster": {
+      "title": "Find your people",
+      "people": "6–20 people",
+      "time": "15–20 min",
+      "cards": "1 card each",
+      "face": "Dealt",
+      "description": "Discover the links between the images and form groups without words.",
+      "mechanic": "Silent grouping"
+    },
+    "market": {
+      "title": "Values market",
+      "people": "6–20 people",
+      "time": "25–35 min",
+      "cards": "3 cards each",
+      "face": "Dealt",
+      "description": "Name personal values, agree on trades and create a shared event.",
+      "mechanic": "Trading by mutual agreement"
+    },
+    "mime": {
+      "title": "Without words",
+      "people": "3–12 people",
+      "time": "20–25 min",
+      "cards": "6–8 cards",
+      "face": "Face-up",
+      "description": "Act out a secretly chosen card through movement, posture and facial expression.",
+      "mechanic": "Acting and guessing"
+    },
+    "trust": {
+      "title": "Circle of trust",
+      "people": "5–20 people",
+      "time": "30–35 min",
+      "cards": "2 cards each",
+      "face": "Face-up",
+      "description": "Hear different associations without having to share your personal topic.",
+      "mechanic": "Sharing circle"
+    },
+    "words": {
+      "title": "In other words",
+      "people": "3–20 people",
+      "time": "30–40 min",
+      "cards": "1 card each",
+      "face": "Face-down",
+      "description": "The cards stay put. The words travel to the left.",
+      "mechanic": "Word rotation"
+    },
+    "associations": {
+      "title": "Associations",
+      "people": "4–8 people",
+      "time": "25–35 min",
+      "cards": "5 cards each",
+      "face": "Private hands",
+      "description": "A hint, secret choices, and finding the storyteller's association.",
+      "mechanic": "Choose, shuffle, guess"
+    },
+    "mission": {
+      "title": "On a mission",
+      "people": "6–20 people",
+      "time": "30–40 min",
+      "cards": "3 per team",
+      "face": "Face-down",
+      "description": "Random images spark ideas for a shared challenge.",
+      "mechanic": "Team workshop"
+    },
+    "detective": {
+      "title": "Detectives",
+      "people": "3+ children",
+      "time": "15–20 min",
+      "cards": "6 cards",
+      "face": "Face-up",
+      "description": "Three visible details become clues to a secretly chosen card.",
+      "mechanic": "Clues and guessing"
+    },
+    "draw": {
+      "title": "Draw it on",
+      "people": "1+ child",
+      "time": "20–30 min",
+      "cards": "1 card each",
+      "face": "Face-up",
+      "description": "Imagine the world beyond the edges of the card and draw it.",
+      "mechanic": "Drawing around an image"
+    },
+    "gift": {
+      "title": "A gift",
+      "people": "3+ children",
+      "time": "15–20 min",
+      "cards": "1 card each",
+      "face": "Face-up",
+      "description": "Choose a symbolic gift by thinking about what would make the other child happy.",
+      "mechanic": "Draw lots and give"
+    },
+    "feelings": {
+      "title": "I feel",
+      "people": "3+ children",
+      "time": "15–20 min",
+      "cards": "1 card each",
+      "face": "Face-down",
+      "description": "Place the images next to the feelings you connect them with.",
+      "mechanic": "Grouping by feelings"
+    }
+  },
+  "variants": {
+    "pair": {
+      "people": "2 people",
+      "adaptation": {
+        "now": "Each of you picks a card for your own state and a second one for how you communicate with each other.",
+        "bridge": "Agree on a shared topic. Each of you builds your own bridge; compare them at the end.",
+        "future": "Choose cards for a shared future and bring them together in one composition.",
+        "default": "A participant and an observer. The observer listens without interpreting, choosing or offering solutions."
+      }
+    },
+    "group": {
+      "people": "3+ people",
+      "adaptation": {
+        "default": "Share one after another around the circle. For the bridge and the future, use only a shared, agreed topic."
+      }
+    },
+    "kids": {
+      "people": "3+ children",
+      "adaptation": {
+        "default": "Short, clear questions. A child may skip their turn. Everyone decides for themselves what the card means."
+      }
+    }
+  },
+  "brand": {
+    "line1": "Working with",
+    "line2": "metaphorical cards",
+    "tagline1": "Inspiration",
+    "tagline2": "for deeper conversations",
+    "book": "Based on the book by Yana Avramova",
+    "coverAlt": "Cover of “Working with Metaphorical Cards” by Yana Avramova",
+    "coverOpen": "Open larger book cover"
+  },
+  "nav": {
+    "home": "Home",
+    "exercises": "Exercises",
+    "deck": "Card decks",
+    "notes": "My notes",
+    "favorites": "Favorites",
+    "settings": "Settings"
+  },
+  "card": {
+    "drawHidden": "Draw a face-down card",
+    "label": "Card {{name}}",
+    "back": "Metaphorical cards",
+    "alt": "Metaphorical card {{name}}"
+  },
+  "inspect": {
+    "addFavorite": "Add to favorites",
+    "removeFavorite": "Remove from favorites"
+  },
+  "library": {
+    "eyebrow": "A SPACE FOR DISCOVERY",
+    "homeTitle": "One card. Many possibilities.",
+    "title": "Exercises",
+    "homeIntro": "Pause for a moment. Look at the images. Listen to your own associations.",
+    "intro": "Practical ideas for working with metaphorical cards",
+    "search": "Search exercises…",
+    "browse_one": "Explore {{count}} exercise",
+    "browse_other": "Explore {{count}} exercises",
+    "quote": "“A picture is worth a thousand words.”",
+    "choose": "Choose your exercise",
+    "all": "All exercises",
+    "includeAdaptations": "Include the adaptations from the book",
+    "shown_one": "{{count}} exercise",
+    "shown_other": "{{count}} exercises",
+    "adaptation": "Adaptation",
+    "unfinished": "Unfinished",
+    "faceCards": "{{face}} cards",
+    "empty": "No exercises match your search.",
+    "footer": "The images have no predefined meaning. You decide what they mean to you."
+  },
+  "deck": {
+    "eyebrow": "IMAGES FOR YOUR ASSOCIATIONS",
+    "title": "Card decks",
+    "favoritesTitle": "Favorite cards",
+    "intro_one": "{{count}} card · Choose an image to take a closer look.",
+    "intro_other": "{{count}} cards · Choose an image to take a closer look.",
+    "favoritesEmpty": "Add favorite cards from the enlarged view of an image."
+  },
+  "notes": {
+    "eyebrow": "MY SPACE",
+    "title": "My notes",
+    "intro": "Thoughts, stories and discoveries you want to keep.",
+    "export": "Export",
+    "emptyTitle": "This is where your discoveries will live.",
+    "emptyText": "Finish an exercise and save your reflections.",
+    "toExercises": "Go to exercises",
+    "drawingIncluded": "The drawing is included in the export and the saved session.",
+    "open": "Open session",
+    "delete": "Delete",
+    "confirmDelete": "Delete this note?"
+  },
+  "settings": {
+    "eyebrow": "YOUR SPACE",
+    "title": "Settings",
+    "intro": "Everything you write is kept only in this browser, on this device.",
+    "decksTitle": "Cards for the exercises",
+    "decksIntro": "Choose which deck each exercise draws its cards from and, if you like, how many cards to work with. Leave the number empty to use the whole deck.",
+    "forAll": "For all:",
+    "cardCountFor": "Number of cards for {{title}}",
+    "cards": "cards",
+    "limitHint": "With a limit, the exercise takes random cards from the deck each time, but never fewer than it needs. This also applies to the pair, group and children's versions. An exercise in progress keeps its cards.",
+    "dataTitle": "Your data",
+    "statNotes_one": "note",
+    "statNotes_other": "notes",
+    "statFavorites_one": "favorite card",
+    "statFavorites_other": "favorite cards",
+    "statDrafts_one": "exercise in progress",
+    "statDrafts_other": "exercises in progress",
+    "backup": "Download a backup",
+    "restore": "Restore from file",
+    "backupHint": "The backup contains your notes, favorite cards and unfinished exercises. Use it to move your data to another device or browser.",
+    "wipeTitle": "Clear everything",
+    "wipeText": "Deletes all notes, favorite cards and unfinished exercises from this browser.",
+    "wipe": "Delete all data",
+    "confirmRestore_one": "Restore {{count}} entry from the file? Current data with the same names will be replaced.",
+    "confirmRestore_other": "Restore {{count}} entries from the file? Current data with the same names will be replaced.",
+    "restorePartial": "Some of the data couldn't be saved.",
+    "restoreInvalid": "This file isn't a valid backup.",
+    "confirmWipe": "Delete all notes, favorite cards and unfinished exercises? This can't be undone.",
+    "minCards": "min. {{n}}"
+  },
+  "workspace404": {
+    "title": "Exercise not found",
+    "back": "Go to exercises"
+  },
+  "workspace": {
+    "saveFailed": "We couldn't save this exercise – your browser's storage is full. Delete or download some older notes and try again.",
+    "finish": {
+      "prompt": "Take a moment for what you want to take with you.",
+      "question": "What did you discover in this exercise?",
+      "saved": "Saved to “My notes”",
+      "save": "Save the exercise",
+      "viewNotes": "See my notes"
+    },
+    "drawNoRepeat": "Drawing without repeats",
+    "chooseHint": "{{picked}} / {{total}} chosen · Tap a chosen card again to put it back.",
+    "topic": {
+      "label": "What would you like to explore?",
+      "placeholder": "A topic, question, situation…"
+    },
+    "people": "Number of participants",
+    "reset": {
+      "label": "Start over",
+      "ask": "Start this exercise over?"
+    },
+    "stayWithCard": "Stay with the card you chose and look for your own answers.",
+    "back": "Back",
+    "finalReflection": "Final reflection"
+  },
+  "ex": {
+    "now": {
+      "pick": "Choose the card that draws you in most right now.",
+      "steps": {
+        "look": {
+          "title": "Look at the card",
+          "questions": [
+            "What drew you to it?",
+            "What is happening in the image?",
+            "What is the atmosphere like?",
+            "What feeling does it stir in you?"
+          ]
+        },
+        "self": {
+          "title": "Find yourself in it",
+          "questions": [
+            "What in the card most reflects how you are right now?",
+            "Is there a detail, image or feeling in which you recognize something of yourself?",
+            "Is there something you hadn't noticed before you chose it?"
+          ]
+        },
+        "sentences": {
+          "title": "Finish the sentences",
+          "sentences": [
+            "Right now I feel…",
+            "What's on my mind most at the moment is…",
+            "I notice that…",
+            "I need…",
+            "I wish…"
+          ]
+        },
+        "important": {
+          "title": "What matters most",
+          "questions": [
+            "Of everything you discovered, what matters most to you right now?"
+          ]
+        }
+      }
+    },
+    "challenge": {
+      "pick": "Choose the card you'd least like to choose.",
+      "steps": {
+        "look": {
+          "title": "Look at the card",
+          "questions": [
+            "What about it pushes you away?",
+            "What feeling does it stir in you?",
+            "What in this image would you rather avoid?"
+          ]
+        },
+        "perspective": {
+          "title": "Another perspective",
+          "questions": [
+            "Beyond what pushes you away, irritates or scares you, is there anything you could read differently?",
+            "Is there anything about it you actually like?"
+          ]
+        },
+        "again": {
+          "title": "Choosing again",
+          "questions": [
+            "Would this still be the last card you'd choose?"
+          ]
+        }
+      },
+      "choices": {
+        "yes": "Yes",
+        "no": "No",
+        "unsure": "I'm not sure"
+      }
+    },
+    "bridge": {
+      "labels": [
+        "Where am I now?",
+        "Where do I want to be?",
+        "What will help me?"
+      ],
+      "hints": [
+        "What is my current situation? How do I feel?",
+        "What does the future I want look like? How will I know I'm there?",
+        "What resources, qualities or steps will help me?"
+      ],
+      "leadDraw": "Draw one card for each position on the bridge.",
+      "leadWhole": "Look at the three cards as one whole picture.",
+      "participant": "Participant {{n}}",
+      "nextCard": "Next card: {{label}} · tap its back.",
+      "reflections": "My reflections",
+      "topic": "Topic",
+      "wholePair": "What similarities, differences and shared possibilities do you see?",
+      "wholeSolo": "What do you see when you look at the three cards as one whole picture?"
+    },
+    "essence": {
+      "leadTopic": "Put into words the question you want to get to the heart of.",
+      "leadRoundOver": "Round {{round}} is over. The cards you kept move on to the next round.",
+      "leadPick1": "Look at the three cards. Which one resonates most with your question?",
+      "leadPick2": "The next step will bring you closer to the heart of it.",
+      "leadFinal": "This is the card that remains. What is it telling you?",
+      "start": "Shuffle and begin",
+      "roundKeptBefore": "Round {{round}} is over · kept",
+      "roundKeptAfter_one": "card",
+      "roundKeptAfter_other": "cards",
+      "startRound": "Start round {{round}}",
+      "question": "Your question at this stage:",
+      "nextRoundNote_one": "In round {{round}} you'll again pick one of three, only from this {{count}} card.",
+      "nextRoundNote_other": "In round {{round}} you'll again pick one of three, only from these {{count}} cards.",
+      "leftBefore_one": "",
+      "leftBefore_other": "",
+      "leftAfter_one": "card left",
+      "leftAfter_other": "cards left",
+      "round": "Round {{round}}",
+      "keptThisRound": "Kept this round",
+      "pickNote": "As soon as you pick a card, we'll move on to three new ones to get to what matters most.",
+      "title": "The essence",
+      "connection": "How do you connect it with the topic you started from?",
+      "newIdea": "What new thought comes to you as you look at it now?",
+      "action": "Is there something you feel like doing?"
+    },
+    "why": {
+      "ordinals": [
+        "first",
+        "second",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "lead": "Pick a card for the {{ord}} “why” and answer the question.",
+      "leadDone": "Go back to your topic. Which answer surprised you the most?",
+      "step": "Why is this important to me?",
+      "topicFirst": "First write down your topic, then draw one of the hidden cards.",
+      "question": "Why is “{{prev}}” important to me?",
+      "this": "this",
+      "answerPlaceholder": "Write your answer here…",
+      "surprised": "This one surprised me",
+      "chain": "My chain of answers",
+      "topic": "Topic: {{topic}}",
+      "back": "Back"
+    },
+    "dialogue": {
+      "firstLine": "What do you want to show me?",
+      "inspiration": [
+        "What do you see in me?",
+        "What is important for me to know right now?",
+        "What is holding me back?",
+        "What advice would you give me?",
+        "What am I not noticing?",
+        "What is the first step?",
+        "What else?"
+      ],
+      "leadStart": "Write down your topic and draw a hidden card.",
+      "lead": "Have a conversation with your card. Write freely, without censoring the answers.",
+      "clearAsk": "Clear the conversation?",
+      "drawHint": "Tap the card to draw it.",
+      "card": "THE CARD",
+      "me": "ME",
+      "cardPlaceholder": "What comes to mind, speaking as the card?",
+      "mePlaceholder": "Your question",
+      "cardDraft": "What does the card answer?…",
+      "meDraft": "Continue the dialogue…",
+      "send": "Send",
+      "inspirationTitle": "Questions for inspiration",
+      "save": "Save the conversation",
+      "saved": "Saved to “My notes”",
+      "viewNotes": "View notes",
+      "sentenceTitle": "Mark the sentence that touched or surprised you the most.",
+      "reflection": "What did you discover in this conversation?"
+    },
+    "story": {
+      "lead": "The cards are hidden. Take turns and keep what has already been told.",
+      "leadDone": "The story is ready. Give it a title.",
+      "final": "ENDING",
+      "turn": "Turn {{n}}",
+      "participant": "Participant {{n}}",
+      "begin": "Start the story",
+      "end": "Finish the story",
+      "continue": "Continue the story",
+      "addLabel": "Add 2–3 sentences inspired by the new card.",
+      "saveTurn": "Save this turn",
+      "flipHint": "Tap the card for turn {{n}} to turn it over.",
+      "titleLabel": "What will the story be called?",
+      "twistLabel": "Which twist surprised you the most?"
+    },
+    "coffee": {
+      "pick": "Participant {{n}}: pick an image that grabs you.",
+      "start": "Start the conversation",
+      "roles": "Participant {{speaker}} speaks · Participant {{listener}} listens",
+      "tellMore": "Tell me more…",
+      "storyLabel": "What drew you in? What associations, memories or wishes does the image stir up?",
+      "summaryLabel": "Listener: So what I hear is… Did I get that right?",
+      "checks": [
+        "Confirm",
+        "Add to it",
+        "Correct it"
+      ],
+      "clarifyLabel": "Addition or correction (optional)",
+      "switch": "Switch roles",
+      "another": "One more card"
+    },
+    "perspective": {
+      "intro": "One and the same card for a problem and its solution.",
+      "problem": "Participant {{n}} · An imagined problem",
+      "solution": "Participant {{n}} · A solution from the same image",
+      "question": "One clarifying question",
+      "clarify": "Answer and build on the idea",
+      "nextRound": "New round · switch roles",
+      "log": "Card {{card}} · {{problem}} → {{solution}}",
+      "changedLabel": "Which of the cards you used do you now see differently?"
+    },
+    "cluster": {
+      "intro": "Sort the cards into groups without words. After five minutes, talk about the connections.",
+      "deal": "Deal one card each",
+      "group": "Group {{n}}",
+      "connections": "What connects these cards?",
+      "experience": "How did you manage to understand each other without words? What surprised you? What helped each of you find your place?",
+      "newRound": "New round · new cards",
+      "sameCards": "Same cards · a different criterion"
+    },
+    "feelings": {
+      "intro": "Draw a card and place it by one feeling or between two. You can swap your card.",
+      "emotions": [
+        "Joy",
+        "Sadness",
+        "Fear",
+        "Anger",
+        "Disgust"
+      ],
+      "swap": "Swap card · {{n}}",
+      "explanations": "This card reminds me of…, because…",
+      "connections": "Does anyone see a different feeling in any of the cards?",
+      "experience": "A person feels this way when…"
+    },
+    "words": {
+      "deal": "Deal the cards",
+      "round": "Round {{n}} · The cards stay. The words move to the left.",
+      "participant": "Participant {{n}}",
+      "firstWord": "One related word",
+      "received": "The word you received",
+      "link": "How do I connect the word to my card?",
+      "pass": "Pass the words to the left",
+      "change": "Did passing the words change the way you see your card?"
+    },
+    "market": {
+      "capacity": "55 cards allow up to 18 participants with three cards each.",
+      "deal": "Deal three cards each",
+      "participant": "Participant {{n}}",
+      "valueFor": "Value for card {{id}}",
+      "valuePlaceholder": "My value…",
+      "pickValue": "Tap a card to choose the one value that matters most to you.",
+      "groupsTitle": "Groups of 3–4 · A shared event",
+      "groupTask": "Group {{n}} (participants {{members}}): how will you make room for everyone's value? Write down 3 concrete solutions."
+    },
+    "trust": {
+      "intro": "Split into groups of 4–6. Your personal topic can stay private.",
+      "start": "Choose two cards each",
+      "pickTwo": "Participant {{n}}: choose two cards.",
+      "confirm": "Confirm your choice",
+      "listen": "Participant {{n}} · Listen and take what feels meaningful to you.",
+      "rules": "Speak for yourself. No guessing the personal topic, no interpreting the person, no advice.",
+      "myImage": "What do I see in my images?",
+      "voice": "Voice {{n}}: I see… / It reminds me of… / To me, these images…",
+      "takeAway": "What do I take from what I heard?",
+      "nextParticipant": "Next participant"
+    },
+    "mission": {
+      "ideasTitle": "Ideas",
+      "ideasText": "Come up with at least three ideas from details, shapes, moods or associations.",
+      "solutionTitle": "Shared solution",
+      "solutionText": "Combine inspiration from all three cards into one shared solution.",
+      "presentTitle": "Presentation",
+      "presentText": "Present your solution. Another team asks one question.",
+      "phaseLead_one": "{{count}} minute · {{text}}",
+      "phaseLead_other": "{{count}} minutes · {{text}}",
+      "lead": "Put the shared challenge into words and split the participants into teams.",
+      "teams_one": "{{count}} team · each team gets three hidden cards.",
+      "teams_other": "{{count}} teams · each team gets three hidden cards.",
+      "deal": "Deal three cards per team",
+      "mission": "Mission",
+      "team": "Team {{n}}",
+      "members": "Participants {{members}}",
+      "phase": "Phase {{n}} · {{title}}",
+      "idea": "Idea {{n}}",
+      "ourSolution": "Our shared solution",
+      "howCards": "How did each card contribute to the solution?",
+      "question": "One question from another team",
+      "answer": "Answer and clarification",
+      "back": "Back",
+      "nextPhase": "Next phase"
+    },
+    "draw": {
+      "pick": "Choose a card to build a world around.",
+      "start": "Start drawing",
+      "beyond": "What lies beyond the edges of the card?",
+      "hint": "Draw around the image. Who or what might be nearby?",
+      "myWorld": "What did you add? What in the card gave you these ideas?"
+    },
+    "gift": {
+      "drawNames": "Draw names",
+      "givesTo": "Participant {{from}} gives a gift to participant {{to}}",
+      "think": "Think about what the other child likes, what they dream of and what would make them happy.",
+      "giftLine": "I'm giving you this card because I know you love…",
+      "recipient": "Recipient: what does this gift mean to me? (optional)",
+      "giveNext": "Give it · next participant",
+      "logLine": "{{from}} → {{to}}: card {{card}}",
+      "feeling": "How did it feel to choose a gift and to receive one?"
+    },
+    "future": {
+      "pick": "Choose 5–7 cards for the future you want to explore.",
+      "arrange": "Arrange your picture",
+      "arrangeTitle": "Arrange the cards freely on the table.",
+      "arrangeHint": "Move each card. We keep its exact position.",
+      "descriptionLabel": "If you had to describe this picture in a few words, what would they be?",
+      "titleLabel": "Give your picture of the future a title.",
+      "titlePlaceholder": "If your future were a film, what would it be called?"
+    }
+  },
+  "answers": {
+    "Финален_размисъл": "Final reflection",
+    "Погледни картата": "Look at the card",
+    "Открий себе си в нея": "Find yourself in it",
+    "Най-важното": "What matters most",
+    "Точно сега се чувствам…": "Right now I feel…",
+    "В момента най-много ме занимава…": "What's on my mind most at the moment is…",
+    "Забелязвам, че…": "I notice that…",
+    "Имам нужда от…": "I need…",
+    "Иска ми се…": "I wish…",
+    "Друга гледна точка": "Another perspective",
+    "Отново избор": "Choosing again",
+    "Избор": "Choice",
+    "Къде съм сега0": "Where am I now?",
+    "Къде искам да бъда1": "Where do I want to be?",
+    "Какво ще ми помогне2": "What will help me?",
+    "Къде съм сега3": "Where am I now? (participant 2)",
+    "Къде искам да бъда4": "Where do I want to be? (participant 2)",
+    "Какво ще ми помогне5": "What will help me? (participant 2)",
+    "Обща_картина": "The whole picture",
+    "Връзка": "Connection",
+    "Нова_идея": "New idea",
+    "Действие": "Action",
+    "Отговор_": "Answer {{n}}",
+    "Изненада": "Surprise",
+    "Изречение": "Chosen sentence",
+    "Текущ_разказ": "Story in progress",
+    "Заглавие": "Title",
+    "Обрат": "Twist",
+    "Разказ_": "Story {{n}}",
+    "Обобщение_": "Summary {{n}}",
+    "Проверка_": "Check {{n}}",
+    "Уточнение_": "Clarification {{n}}",
+    "Проблем_": "Problem {{n}}",
+    "Решение_": "Solution {{n}}",
+    "Въпрос_": "Question {{n}}",
+    "Променена_гледна_точка": "Changed perspective",
+    "Обяснения": "Explanations",
+    "Връзки": "Connections",
+    "Преживяване": "Experience",
+    "Промяна": "Change",
+    "Важна_": "Chosen card {{n}}",
+    "Ценност_": "Value for card {{n}}",
+    "Група_": "Group {{n}}",
+    "Моят_образ_": "My image {{n}}",
+    "Взимам_": "What I take away {{n}}",
+    "Представяне_": "Presentation {{n}}",
+    "Моят_свят": "My world",
+    "Подарък_": "Gift {{n}}",
+    "Получател_": "Recipient {{n}}",
+    "Чувство": "Feeling",
+    "Наблюдател": "Observer",
+    "Подсказка": "Hint",
+    "Улика_": "Clue {{n}}",
+    "Причина_": "Reason {{n}}",
+    "Замисъл_": "Intention {{n}}",
+    "Общо_бъдеще": "Shared future",
+    "Мост_": "Bridge {{n}}",
+    "Сравнение": "Comparison",
+    "Условия_": "Conditions {{n}}",
+    "Слушател_": "Listener {{n}}",
+    "Потвърждение_": "Confirmation {{n}}",
+    "Състояние_": "State {{n}}",
+    "Общуване_": "Communication {{n}}",
+    "Сходства": "Similarities",
+    "Асоциация_": "Association {{n}}",
+    "Идея_": "Idea {{n}}",
+    "Връзка_": "Connection {{n}}",
+    "Описание": "Description"
+  },
+  "shell": {
+    "back": "Back to exercises",
+    "resumed": "You're picking up where you left off last time.",
+    "restart": "Start over",
+    "hide": "Hide",
+    "observer": "Observer: a clarifying question or a summary",
+    "observerPrompts": "“Tell me more…” · “Did I understand you correctly?”",
+    "facilitator": "Facilitator mode · Live conversation, one shared device",
+    "optional": " · Taking part and sharing are optional.",
+    "footer": "Based on “Working with Metaphorical Cards” by Yana Avramova · p. {{page}} · You decide what an image means. · Your answers are saved automatically in this browser."
+  },
+  "steps": {
+    "of": "Step {{current}} of {{total}}"
+  },
+  "preview": {
+    "choose": "Choose a card",
+    "alt": "Metaphorical card {{label}}",
+    "zoom": "Take a closer look"
+  },
+  "composition": {
+    "card": "Card {{id}}"
+  },
+  "timer": {
+    "pause": "Pause",
+    "start": "Start",
+    "endPhase": "End this phase"
+  },
+  "trade": {
+    "title": "Propose a swap",
+    "participant": "Participant",
+    "card": "Card",
+    "cardNumber": "#{{id}}",
+    "agree": "I agree",
+    "swap": "Swap the two cards",
+    "rule": "A swap only happens when both people agree. Everyone keeps exactly three cards."
+  },
+  "guess": {
+    "introAssociations": "Each private hand is viewed in turn. Pass the device to the active participant.",
+    "introDetective": "Six cards. The detective secretly picks one and prepares three visible details as clues.",
+    "introMime": "The chosen image is acted out without words or sounds. Everyone else guesses after the performance.",
+    "prepare": "Set up the round",
+    "participant": "Participant {{n}}",
+    "storyteller": "Storyteller",
+    "detectiveOnly": "Only the detective looks",
+    "presenterOnly": "Only the performer looks",
+    "privateChoice": "Private choice",
+    "lookAway": "Everyone else looks away. Close the private view before you pass the device on.",
+    "openPrivate": "Open the private view",
+    "hintLabel": "Give a word or a short phrase as a hint",
+    "hint": "Hint: {{hint}}",
+    "clueLabel": "Clue {{n}}: a visible detail",
+    "confirmChoice": "Hide and confirm your choice",
+    "followClues": "Follow the clues",
+    "mimeTitle": "Performing without words",
+    "mimeTiming": "One minute to prepare, then one minute to perform.",
+    "toGuessing": "On to guessing",
+    "clueEyebrow": "CLUE {{n}} / 3",
+    "observer": "Observer {{n}}: pick your guess and lock it in.",
+    "reasonLabel": "What pointed you there? (optional)",
+    "nextClue": "Next clue",
+    "reveal": "Reveal the card",
+    "chosenCard": "The chosen card",
+    "guesses": "Guesses: {{list}}",
+    "cardNumber": "#{{id}}",
+    "intentDetective": "Name the three details. What was easier: coming up with clues or guessing?",
+    "intentMime": "What did you want to convey? What did the others notice?",
+    "nextRound": "Next participant · new round"
+  },
+  "drawing": {
+    "color": "Pencil color",
+    "thickness": "Thickness",
+    "undo": "Undo line",
+    "alt": "The card itself stays unchanged"
+  },
+  "adapted": {
+    "topicLabel": "Your agreed shared theme",
+    "topicPlaceholder": "What would you like to explore together?",
+    "start": "Start together",
+    "participant": "Participant {{n}}",
+    "cardMyState": "A card for how I am",
+    "cardOurCommunication": "A card for how we communicate",
+    "bridgeSteps": [
+      "Where I am now",
+      "Where I want to be",
+      "What will help me"
+    ],
+    "chooseImages": "Choose your images",
+    "inspectSelected": "Take a closer look at the selected card",
+    "selectedCount_one": "{{selected}} selected · {{need}} card for this participant",
+    "selectedCount_other": "{{selected}} selected · {{need}} cards for this participant",
+    "confirmNext": "Confirm · next participant",
+    "confirmShare": "Confirm · on to sharing",
+    "futureTitle": "Our shared picture · {{topic}}",
+    "futureMeet": "Where do our wishes meet? How do our differences find their place?",
+    "futureName": "What will we call our shared picture?",
+    "bridgeOf": "Participant {{n}}'s bridge",
+    "seeInImage": "What do I see in this image?",
+    "compare": "Which possibilities help everyone? What's similar, and what's different?",
+    "problem": "Participant {{n}}: what imaginary problem does the image suggest?",
+    "solution": "Participant {{n}}: a solution, and the detail that suggests it",
+    "conditions": "Under what conditions would the suggested solutions be helpful?",
+    "coffeeTitle": "Participant {{n}} shares. The next person listens and sums it up.",
+    "story": "What drew you to the card, and what associations did it bring up?",
+    "listener": "Participant {{n}}: What I'm hearing is… Did I understand you correctly?",
+    "confirmation": "Confirm, add to, or correct it",
+    "myState": "How I am",
+    "ourCommunication": "How we communicate",
+    "stateToday": "Today I feel… What in the card reminds you of that?",
+    "stateCard": "What in the card reflects how I am?",
+    "communication": "How do I experience our communication?",
+    "similarities": "What's similar and what's different in our experiences?",
+    "nextParticipant": "Next participant"
+  }
+}

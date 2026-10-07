@@ -8,6 +8,8 @@ import {
   NavLink,
   useParams,
   useNavigate,
+  useLocation,
+  useNavigationType,
 } from "react-router-dom";
 import {
   Home,
@@ -36,16 +38,23 @@ import {
   Settings,
 } from "lucide-react";
 import {
-  categories,
-  exercises,
-  library,
   deck,
   decks,
+  minCards,
   cardSrc,
   cardLabel,
   shuffle,
   type Exercise,
 } from "./data";
+import {
+  I18nProvider,
+  LanguageSwitcher,
+  answerLabel,
+  translate,
+  translateList,
+  useI18n,
+  useLibrary,
+} from "./i18n";
 import "./style.css";
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
@@ -101,17 +110,23 @@ type State = {
   strokes: { color: string; width?: number; points: number[][] }[];
   // Set once the exercise is saved to the notes; the next visit starts fresh.
   done?: boolean;
+  // The cards this run of the exercise plays with (deck, possibly limited).
+  cards?: number[];
 };
-const FIRST_LINE = "Какво искаш да ми покажеш?";
+// The dialogue's default first line, in any language, doesn't count as started.
+const FIRST_LINES = (["bg", "en"] as const).map((l) =>
+  translate(l, "ex.dialogue.firstLine"),
+);
 // Choosing the first card alone doesn't count; writing or moving past the first step does.
 function started(d: State, base: string) {
   return (
     d.stage > (base === "dialogue" ? 1 : 0) ||
     !!d.topic.trim() ||
     Object.values(d.answers).some((v) => v?.trim()) ||
-    d.lines.some((l, i) => l.trim() && !(i === 0 && l === FIRST_LINE)) ||
+    d.lines.some((l, i) => l.trim() && !(i === 0 && FIRST_LINES.includes(l))) ||
     d.words.some((w) => w?.trim()) ||
-    d.strokes.length > 0
+    d.strokes.length > 0 ||
+    Object.keys(d.positions).length > 0
   );
 }
 // Which deck each exercise draws from, chosen in Settings. Defaults to Diarc.
@@ -119,14 +134,28 @@ type DeckChoice = Record<string, string>;
 const DECK_CHOICE = "mc-exercise-decks";
 const deckFor = (choice: DeckChoice, base: string) =>
   decks.find((d) => d.key === choice[base]) ?? decks[0];
-const exerciseCards = (base: string) =>
-  deckFor(read<DeckChoice>(DECK_CHOICE, {}), base).ids;
+// Optional per-exercise card limit: a random subset of that size from the
+// deck, never smaller than the number of cards the exercise needs.
+type CardLimits = Record<string, number>;
+const CARD_LIMITS = "mc-exercise-limits";
+const exerciseCards = (id: string) => {
+  const base = id.split("-")[0];
+  const ids = deckFor(read<DeckChoice>(DECK_CHOICE, {}), base).ids;
+  const limit = read<CardLimits>(CARD_LIMITS, {})[base];
+  const n = limit && Math.max(limit, minCards[base] ?? 1);
+  return n > 0 && n < ids.length
+    ? shuffle(ids)
+        .slice(0, n)
+        .sort((a, b) => a - b)
+    : ids;
+};
 const initial = (cards = deck): State => ({
   stage: 0,
   topic: "",
   selected: [],
   answers: {},
   pool: shuffle(cards),
+  cards,
   winners: [],
   round: 1,
   positions: {},
@@ -155,22 +184,23 @@ function Card({
   onClick?: () => void;
   large?: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <button
       type="button"
       className={`card ${hidden ? "back" : ""} ${selected ? "selected" : ""} ${large ? "large" : ""}`}
       onClick={onClick}
-      aria-label={hidden ? "Изтегли скрита карта" : `Карта ${cardLabel(id)}`}
+      aria-label={hidden ? t("card.drawHidden") : t("card.label", { name: cardLabel(id) })}
     >
       {hidden ? (
         <>
           <Leaf size={40} />
-          <span>Метафорични карти</span>
+          <span>{t("card.back")}</span>
         </>
       ) : (
         <img
           src={cardSrc(id)}
-          alt={`Метафорична карта ${cardLabel(id)}`}
+          alt={t("card.alt", { name: cardLabel(id) })}
           draggable={false}
         />
       )}
@@ -178,27 +208,39 @@ function Card({
   );
 }
 function App() {
+  const { t } = useI18n();
   const [inspect, setInspect] = useState(0);
+  const [coverOpen, setCoverOpen] = useState(false);
+  useEffect(() => {
+    if (!coverOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setCoverOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [coverOpen]);
   const [favorites, setFavorites] = useLocal<number[]>("mc-favorites", []);
   return (
     <HashRouter>
       <div className="app">
         <aside>
           <Link className="brand" to="/">
-            <span className="brand-leaf">◒</span>
+            <img
+              className="brand-logo"
+              src={`${import.meta.env.BASE_URL}logo-256.png`}
+              alt=""
+            />
             <span>
-              Работа с<br />
-              <b>метафорични карти</b>
+              {t("brand.line1")}<br />
+              <b>{t("brand.line2")}</b>
             </span>
           </Link>
           <nav>
             {[
-              ["/", "Начало", Home],
-              ["/exercises", "Упражнения", BookOpen],
-              ["/deck", "Колода карти", Layers],
-              ["/notes", "Моите записки", NotebookPen],
-              ["/favorites", "Любими", Heart],
-              ["/settings", "Настройки", Settings],
+              ["/", t("nav.home"), Home],
+              ["/exercises", t("nav.exercises"), BookOpen],
+              ["/deck", t("nav.deck"), Layers],
+              ["/notes", t("nav.notes"), NotebookPen],
+              ["/favorites", t("nav.favorites"), Heart],
+              ["/settings", t("nav.settings"), Settings],
             ].map(([path, label, Icon]) => (
               <NavLink key={String(path)} to={String(path)} end={path === "/"} className={({isActive})=>isActive?"active":""}>
                 {React.createElement(Icon as typeof Home, { size: 18 })}
@@ -206,14 +248,25 @@ function App() {
               </NavLink>
             ))}
           </nav>
+          <LanguageSwitcher />
           <div className="aside-bottom">
-            <Leaf size={65} />
+            <button
+              type="button"
+              className="book-cover"
+              onClick={() => setCoverOpen(true)}
+              aria-label={t("brand.coverOpen")}
+            >
+              <img
+                src={`${import.meta.env.BASE_URL}book-cover.jpg`}
+                alt={t("brand.coverAlt")}
+              />
+            </button>
             <p>
-              Вдъхновение
+              {t("brand.tagline1")}
               <br />
-              за по-дълбоки разговори
+              {t("brand.tagline2")}
             </p>
-            <small>По книгата на Яна Аврамова</small>
+            <small>{t("brand.book")}</small>
           </div>
         </aside>
         <main>
@@ -242,11 +295,11 @@ function App() {
             <button
               className="close"
               onClick={() => setInspect(0)}
-              aria-label="Затвори"
+              aria-label={t("common.close")}
             >
               <X />
             </button>
-            <img src={cardSrc(inspect)} alt={`Карта ${cardLabel(inspect)}`} />
+            <img src={cardSrc(inspect)} alt={t("card.label", { name: cardLabel(inspect) })} />
             <button
               className="secondary"
               onClick={() =>
@@ -262,18 +315,48 @@ function App() {
                 fill={favorites.includes(inspect) ? "currentColor" : "none"}
               />{" "}
               {favorites.includes(inspect)
-                ? "Премахни от любими"
-                : "Добави в любими"}
+                ? t("inspect.removeFavorite")
+                : t("inspect.addFavorite")}
             </button>
+          </div>
+        </div>
+      )}
+      {coverOpen && (
+        <div className="overlay" onClick={() => setCoverOpen(false)}>
+          <div className="inspection" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="close"
+              onClick={() => setCoverOpen(false)}
+              aria-label={t("common.close")}
+            >
+              <X />
+            </button>
+            <img
+              src={`${import.meta.env.BASE_URL}book-cover-large.jpg`}
+              alt={t("brand.coverAlt")}
+            />
           </div>
         </div>
       )}
     </HashRouter>
   );
 }
+// The search text outlives the list so it is still there after an exercise.
+let lastQuery = "";
 function Library({ home = false }: { home?: boolean }) {
+  const { t } = useI18n();
+  const { lang, categories, library } = useLibrary();
+  const location = useLocation();
+  const navType = useNavigationType();
+  // Coming back from an exercise (its back link or the browser's) keeps the
+  // filters as they were.
+  const from = (location.state as { from?: string } | null)?.from;
+  const returning = !!from || navType === "POP";
   const [cat, setCat] = useLocal("mc-filter-category", -1);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(() => (returning ? lastQuery : ""));
+  useEffect(() => {
+    lastQuery = q;
+  }, [q]);
   const [adapt, setAdapt] = useLocal("mc-filter-adapt", false);
   const cardsRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -289,6 +372,20 @@ function Library({ home = false }: { home?: boolean }) {
     io.observe(el);
     return () => io.disconnect();
   }, []);
+  // The exercises page opens on the full, unfiltered list, scrolled down as
+  // when a category is picked; home always starts at the top. Returning from
+  // an exercise lands straight on the list, with the floating tabs showing,
+  // and its tile in view.
+  useEffect(() => {
+    if (from) {
+      listRef.current?.scrollIntoView();
+      document.querySelector(`[data-exercise="${from}"]`)?.scrollIntoView({ block: "nearest" });
+    } else if (home) window.scrollTo({ top: 0, behavior: "smooth" });
+    else {
+      if (!returning) setCat(-1);
+      listRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [home]);
   const pick = (i: number) => {
     setCat(cat === i ? -1 : i);
     if (cat !== i) listRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -311,18 +408,18 @@ function Library({ home = false }: { home?: boolean }) {
     (e) =>
       (cat < 0 || e.category === cat) &&
       (adapt || !e.adaptation) &&
-      e.title.toLocaleLowerCase("bg").includes(q.toLocaleLowerCase("bg")),
+      e.title.toLocaleLowerCase(lang).includes(q.toLocaleLowerCase(lang)),
   );
   return (
     <div className="library">
       <div className="page-heading">
         <div>
-          <p className="eyebrow">ПРОСТРАНСТВО ЗА ОТКРИВАНЕ</p>
-          <h1>{home ? "Една карта. Много възможности." : "Упражнения"}</h1>
+          <p className="eyebrow">{t("library.eyebrow")}</p>
+          <h1>{home ? t("library.homeTitle") : t("library.title")}</h1>
           <p>
             {home
-              ? "Спри за момент. Разгледай образите. Чуй собствените си асоциации."
-              : "Практически идеи за работа с метафорични карти"}
+              ? t("library.homeIntro")
+              : t("library.intro")}
           </p>
         </div>
         <label className="search">
@@ -330,7 +427,7 @@ function Library({ home = false }: { home?: boolean }) {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Търси упражнение…"
+            placeholder={t("library.search")}
           />
         </label>
       </div>
@@ -361,18 +458,18 @@ function Library({ home = false }: { home?: boolean }) {
             <h2>{c.title}</h2>
             <p>{c.text}</p>
             <span>
-              Разгледай {count(i)} упражнения <ArrowRight size={15} />
+              {t("library.browse", { count: count(i) })} <ArrowRight size={15} />
             </span>
             <Leaf className="decoration" />
           </button>
         ))}
       </div>
-      <div className="quote">„Една картина казва повече от хиляди думи.“</div>
+      <div className="quote">{t("library.quote")}</div>
       <div className="list-heading" ref={listRef}>
-        <h2>{cat < 0 ? "Избери своето упражнение" : categories[cat].title}</h2>
+        <h2>{cat < 0 ? t("library.choose") : categories[cat].title}</h2>
         {cat >= 0 && (
           <button className="text-button" onClick={() => setCat(-1)}>
-            <X size={13} /> Всички упражнения
+            <X size={13} /> {t("library.all")}
           </button>
         )}
         <label className="toggle">
@@ -381,13 +478,19 @@ function Library({ home = false }: { home?: boolean }) {
             checked={adapt}
             onChange={(e) => setAdapt(e.target.checked)}
           />{" "}
-          Включи адаптациите от книгата
+          {t("library.includeAdaptations")}
         </label>
-        <span>{shown.length} упражнения</span>
+        <span>{t("library.shown", { count: shown.length })}</span>
       </div>
       <div className={`exercise-list ${cat < 0 ? "" : "filtered"}`}>
         {shown.map((e, i) => (
-          <Link className="exercise-tile" to={`/exercise/${e.id}`} key={e.id}>
+          <Link
+            className="exercise-tile"
+            to={`/exercise/${e.id}`}
+            state={{ back: home ? "/" : "/exercises" }}
+            data-exercise={e.id}
+            key={e.id}
+          >
             <div className="tile-image">
               <img
                 src={cardSrc([3, 17, 29, 8, 44, 21, 12][i % 7])}
@@ -396,12 +499,12 @@ function Library({ home = false }: { home?: boolean }) {
               {/* The category is already clear from the active filter. */}
               {(cat < 0 || e.adaptation) && (
                 <span className={`tag c${e.category}`}>
-                  {e.adaptation ? "Адаптация" : categories[e.category].title}
+                  {e.adaptation ? t("library.adaptation") : categories[e.category].title}
                 </span>
               )}
               {unfinished.has(e.id) && (
                 <span className="unfinished-badge">
-                  <NotebookPen size={12} /> Незавършено
+                  <NotebookPen size={12} /> {t("library.unfinished")}
                 </span>
               )}
             </div>
@@ -421,17 +524,19 @@ function Library({ home = false }: { home?: boolean }) {
                 <span>{e.cards}</span>
               </div>
               <div className="tile-bottom">
-                <span>{e.face} карти</span>
+                <span>{t("library.faceCards", { face: e.face })}</span>
                 <ArrowRight size={19} />
               </div>
             </div>
           </Link>
         ))}
       </div>
-      {!shown.length && <p>Няма упражнения за това търсене.</p>}
+      {!shown.length && <p>{t("library.empty")}</p>}
       <footer>
-        Образите нямат предварително зададено значение. Ти определяш какво
-        означават за теб.
+        {t("library.footer")}
+        <div className="copyright">
+          {t("common.copyright", { year: new Date().getFullYear() })}
+        </div>
       </footer>
     </div>
   );
@@ -456,14 +561,15 @@ function Deck({
   ids?: number[];
 }) {
   // Called before the early return: /deck and /favorites share this component instance.
+  const { t } = useI18n();
   const [tab, setTab] = useLocal("mc-deck-tab", 0, (v) => !decks[v]);
   if (ids) {
     return (
       <div className="library">
-        <p className="eyebrow">ОБРАЗИ ЗА ТВОИТЕ АСОЦИАЦИИ</p>
-        <h1>Любими карти</h1>
+        <p className="eyebrow">{t("deck.eyebrow")}</p>
+        <h1>{t("deck.favoritesTitle")}</h1>
         <p>
-          {ids.length} карти · Избери изображение, за да го разгледаш отблизо.
+          {t("deck.intro", { count: ids.length })}
         </p>
         <div className="spread deck-spread">
           {ids.map((id) => (
@@ -471,7 +577,7 @@ function Deck({
           ))}
         </div>
         {!ids.length && (
-          <p>Добави любими карти от увеличения изглед на изображението.</p>
+          <p>{t("deck.favoritesEmpty")}</p>
         )}
       </div>
     );
@@ -479,11 +585,10 @@ function Deck({
   const current = decks[tab];
   return (
     <div className="library">
-      <p className="eyebrow">ОБРАЗИ ЗА ТВОИТЕ АСОЦИАЦИИ</p>
-      <h1>Колода карти</h1>
+      <p className="eyebrow">{t("deck.eyebrow")}</p>
+      <h1>{t("deck.title")}</h1>
       <p>
-        {current.ids.length} карти · Избери изображение, за да го разгледаш
-        отблизо.
+        {t("deck.intro", { count: current.ids.length })}
       </p>
       <div className="categories tabs deck-tabs" role="tablist">
         {decks.map((d, i) => (
@@ -509,6 +614,8 @@ function Deck({
   );
 }
 function Notes() {
+  const { t } = useI18n();
+  const { lang, library } = useLibrary();
   const [sessions, setSessions] = useLocal<Session[]>("mc-notes", []);
   const [open, setOpen] = useState("");
   const download = () => {
@@ -526,25 +633,25 @@ function Notes() {
     <div className="library">
       <div className="page-heading">
         <div>
-          <p className="eyebrow">МОЕТО ПРОСТРАНСТВО</p>
-          <h1>Моите записки</h1>
-          <p>Мисли, истории и открития, които искаш да запазиш.</p>
+          <p className="eyebrow">{t("notes.eyebrow")}</p>
+          <h1>{t("notes.title")}</h1>
+          <p>{t("notes.intro")}</p>
         </div>
         <button
           className="secondary"
           disabled={!sessions.length}
           onClick={download}
         >
-          <Download size={17} /> Експорт
+          <Download size={17} /> {t("notes.export")}
         </button>
       </div>
       {sessions.length === 0 ? (
         <div className="empty">
           <NotebookPen size={40} />
-          <h2>Тук ще живеят твоите открития.</h2>
-          <p>Завърши упражнение и запази размислите си.</p>
+          <h2>{t("notes.emptyTitle")}</h2>
+          <p>{t("notes.emptyText")}</p>
           <Link className="primary" to="/exercises">
-            Към упражненията <ArrowRight size={16} />
+            {t("notes.toExercises")} <ArrowRight size={16} />
           </Link>
         </div>
       ) : (
@@ -557,7 +664,7 @@ function Notes() {
               <div>
                 <h2>{library.find((e) => e.id === s.exercise)?.title}</h2>
                 <p>
-                  {new Date(s.date).toLocaleString("bg-BG")} · {s.data.topic}
+                  {new Date(s.date).toLocaleString(lang)} · {s.data.topic}
                 </p>
               </div>
               <span>{open === s.id ? "−" : "+"}</span>
@@ -573,7 +680,7 @@ function Notes() {
                   .filter(([, v]) => v)
                   .map(([k, v]) => (
                     <p key={k}>
-                      <b>{k.replaceAll("_", " ")}</b>
+                      <b>{answerLabel(lang, k)}</b>
                       <br />
                       {v}
                     </p>
@@ -582,7 +689,7 @@ function Notes() {
                   <p key={i}>{l}</p>
                 ))}
                 {s.data.strokes.length > 0 && (
-                  <p>Рисунката е включена в експорта и запазената сесия.</p>
+                  <p>{t("notes.drawingIncluded")}</p>
                 )}
                 <button
                   className="secondary"
@@ -591,16 +698,16 @@ function Notes() {
                     location.hash = "/exercise/" + s.exercise;
                   }}
                 >
-                  Отвори сесията
+                  {t("notes.open")}
                 </button>
                 <button
                   className="text-button"
                   onClick={() => {
-                    if (confirm("Да изтрия тази записка?"))
+                    if (confirm(t("notes.confirmDelete")))
                       setSessions(sessions.filter((n) => n.id !== s.id));
                   }}
                 >
-                  Изтрий
+                  {t("notes.delete")}
                 </button>
               </>
             )}
@@ -618,15 +725,31 @@ function storedKeys() {
   }
 }
 function DeckSettings() {
+  const { t } = useI18n();
+  const { categories, exercises } = useLibrary();
   const [choice, setChoice] = useLocal<DeckChoice>(DECK_CHOICE, {});
+  const [limits, setLimits] = useLocal<CardLimits>(CARD_LIMITS, {});
+  const setLimit = (base: string, value: string) =>
+    setLimits(({ [base]: _, ...rest }) => {
+      const n = Math.floor(Number(value));
+      return n > 0 ? { ...rest, [base]: n } : rest;
+    });
+  // Grouped by category and numbered within it: 1.1, 1.2, … 2.1, …
+  const numbered = categories.flatMap((_, c) =>
+    exercises
+      .filter((e) => e.category === c)
+      .map((e, i) => ({ e, num: `${c + 1}.${i + 1}` })),
+  );
   const setAll = (key: string) =>
     setChoice(Object.fromEntries(exercises.map((e) => [e.id, key])));
   return (
     <section className="settings-card">
-      <h2>Карти за упражненията</h2>
-      <p>Избери от коя колода да се теглят картите във всяко упражнение.</p>
+      <h2>{t("settings.decksTitle")}</h2>
+      <p>
+        {t("settings.decksIntro")}
+      </p>
       <div className="row deck-all">
-        <span>За всички:</span>
+        <span>{t("settings.forAll")}</span>
         {decks.map((d) => (
           <button key={d.key} className="secondary" onClick={() => setAll(d.key)}>
             {d.title}
@@ -634,11 +757,15 @@ function DeckSettings() {
         ))}
       </div>
       <ul className="deck-bindings">
-        {exercises.map((e) => {
+        {numbered.map(({ e, num }) => {
           const current = deckFor(choice, e.id);
+          const limit = limits[e.id];
           return (
             <li key={e.id}>
-              <span>{e.title}</span>
+              <span>
+                <b>{num}</b>
+                {e.title}
+              </span>
               <div className="deck-toggles" role="radiogroup" aria-label={e.title}>
                 {decks.map((d) => (
                   <button
@@ -653,18 +780,35 @@ function DeckSettings() {
                   </button>
                 ))}
               </div>
+              <label className="card-limit">
+                <input
+                  type="number"
+                  min={minCards[e.id] ?? 1}
+                  max={current.ids.length}
+                  value={limit ?? ""}
+                  placeholder={String(current.ids.length)}
+                  onChange={(ev) => setLimit(e.id, ev.target.value)}
+                  aria-label={t("settings.cardCountFor", { title: e.title })}
+                />
+                {t("settings.cards")}
+                {/* Always rendered so the column lines up across rows. */}
+                <small>
+                  {minCards[e.id] > 1 &&
+                    t("settings.minCards", { n: minCards[e.id] })}
+                </small>
+              </label>
             </li>
           );
         })}
       </ul>
       <p className="hint">
-        Важи и за вариантите на упражнението по двойки, в група и с деца.
-        Започнато упражнение продължава със своите карти.
+        {t("settings.limitHint")}
       </p>
     </section>
   );
 }
 function SettingsPage() {
+  const { t } = useI18n();
   const keys = storedKeys();
   const notes = read<Session[]>("mc-notes", []).length;
   const favorites = read<number[]>("mc-favorites", []).length;
@@ -692,21 +836,21 @@ function SettingsPage() {
       if (!entries.length) throw new Error("empty backup");
       if (
         !confirm(
-          `Да възстановя ${entries.length} записа от файла? Текущите данни със същите имена ще бъдат заменени.`,
+          t("settings.confirmRestore", { count: entries.length }),
         )
       )
         return;
       if (!entries.every(([k, v]) => write(k, v)))
-        alert("Част от данните не можаха да бъдат запазени.");
+        alert(t("settings.restorePartial"));
       location.reload();
     } catch {
-      alert("Файлът не е валидно резервно копие.");
+      alert(t("settings.restoreInvalid"));
     }
   };
   const wipe = () => {
     if (
       !confirm(
-        "Да изтрия ли всички записки, любими карти и незавършени упражнения? Това не може да се отмени.",
+        t("settings.confirmWipe"),
       )
     )
       return;
@@ -717,37 +861,36 @@ function SettingsPage() {
     <div className="library settings">
       <div className="page-heading">
         <div>
-          <p className="eyebrow">ТВОЕТО ПРОСТРАНСТВО</p>
-          <h1>Настройки</h1>
+          <p className="eyebrow">{t("settings.eyebrow")}</p>
+          <h1>{t("settings.title")}</h1>
           <p>
-            Всичко, което записваш, се пази само в този браузър на това
-            устройство.
+            {t("settings.intro")}
           </p>
         </div>
       </div>
       <DeckSettings />
       <section className="settings-card">
-        <h2>Твоите данни</h2>
+        <h2>{t("settings.dataTitle")}</h2>
         <div className="stats">
           <div>
             <b>{notes}</b>
-            <span>записки</span>
+            <span>{t("settings.statNotes", { count: notes })}</span>
           </div>
           <div>
             <b>{favorites}</b>
-            <span>любими карти</span>
+            <span>{t("settings.statFavorites", { count: favorites })}</span>
           </div>
           <div>
             <b>{drafts}</b>
-            <span>упражнения в процес</span>
+            <span>{t("settings.statDrafts", { count: drafts })}</span>
           </div>
         </div>
         <div className="row">
           <button className="primary" onClick={backup}>
-            <Download size={16} /> Изтегли резервно копие
+            <Download size={16} /> {t("settings.backup")}
           </button>
           <label className="secondary">
-            <Upload size={16} /> Възстанови от файл
+            <Upload size={16} /> {t("settings.restore")}
             <input
               type="file"
               accept="application/json,.json"
@@ -761,19 +904,16 @@ function SettingsPage() {
           </label>
         </div>
         <p className="hint">
-          Резервното копие съдържа записките, любимите карти и незавършените
-          упражнения. С него можеш да пренесеш данните си на друго устройство
-          или в друг браузър.
+          {t("settings.backupHint")}
         </p>
       </section>
       <section className="settings-card">
-        <h2>Изчисти всичко</h2>
+        <h2>{t("settings.wipeTitle")}</h2>
         <p>
-          Изтрива всички записки, любими карти и незавършени упражнения от този
-          браузър.
+          {t("settings.wipeText")}
         </p>
         <button className="secondary danger" onClick={wipe}>
-          <Trash2 size={16} /> Изтрий всички данни
+          <Trash2 size={16} /> {t("settings.wipe")}
         </button>
       </section>
     </div>
@@ -781,13 +921,15 @@ function SettingsPage() {
 }
 function Workspace({ inspect }: { inspect: (id: number) => void }) {
   const { id = "now" } = useParams();
+  const { t } = useI18n();
+  const { library } = useLibrary();
   const ex = library.find((e) => e.id === id);
   return ex ? (
     <ExerciseWorkspace key={id} ex={ex} inspect={inspect} />
   ) : (
     <div className="library">
-      <h1>Упражнението не е намерено</h1>
-      <Link to="/exercises">Към упражненията</Link>
+      <h1>{t("workspace404.title")}</h1>
+      <Link to="/exercises">{t("workspace404.back")}</Link>
     </div>
   );
 }
@@ -798,19 +940,29 @@ function ExerciseWorkspace({
   ex: Exercise;
   inspect: (id: number) => void;
 }) {
+  const { t, tList, lang } = useI18n();
+  const location = useLocation();
   const base = ex.id.split("-")[0];
-  const [cards] = useState(() => exerciseCards(base));
+  const [fresh] = useState(() => exerciseCards(ex.id));
+  // With the deck limited to no more cards than the exercise needs, there is
+  // nothing to choose: all of them start selected and the pick step is skipped.
+  const autoPick = (c: number[]) =>
+    base === "future" && ex.category === 0 && c.length <= minCards.future;
+  const start = (c: number[]): State =>
+    autoPick(c) ? { ...initial(c), selected: c } : initial(c);
   const key = "mc-draft-" + ex.id;
   const [resumed, setResumed] = useState(() => {
-    const d = read<State>(key, initial(cards));
+    const d = read<State>(key, start(fresh));
     return !d.done && started(d, base);
   });
   // Saved or not-yet-started drafts reopen at the first step: choosing a card.
   const [s, set] = useLocal<State>(
     key,
-    initial(cards),
+    start(fresh),
     (d) => !!d.done || !started(d, base),
   );
+  // A resumed draft keeps the cards it started with.
+  const cards = s.cards ?? fresh;
   const [saved, setSaved] = useState(false);
   const [choice, setChoice] = useState(0);
   const [draftLine, setDraftLine] = useState("");
@@ -820,7 +972,7 @@ function ExerciseWorkspace({
   const field = (
     key: string,
     label: string,
-    placeholder = "Запиши своите мисли тук…",
+    placeholder = t("common.writeThoughts"),
   ) => (
     <label className="field">
       {label}
@@ -831,7 +983,11 @@ function ExerciseWorkspace({
       />
     </label>
   );
-  const next = (label = "Продължи", disabled = false, fn?: () => void) => (
+  const next = (
+    label = t("common.continue"),
+    disabled = false,
+    fn?: () => void,
+  ) => (
     <button
       className="primary"
       disabled={disabled}
@@ -854,24 +1010,22 @@ function ExerciseWorkspace({
     ]);
     if (ok) update({ done: true });
     if (!ok) {
-      alert(
-        "Упражнението не можа да бъде запазено – паметта на браузъра е пълна. Изтрий стари записки или ги изтегли.",
-      );
+      alert(t("workspace.saveFailed"));
       return;
     }
     setSaved(true);
   };
   const finish = () => (
     <div className="finish">
-      <p>Отдели момент за това, което искаш да вземеш със себе си.</p>
-      {field("Финален_размисъл", "Какво откри в това упражнение?")}
+      <p>{t("workspace.finish.prompt")}</p>
+      {field("Финален_размисъл", t("workspace.finish.question"))}
       <button className="primary" onClick={save} disabled={saved}>
         <Check size={17} />
-        {saved ? "Запазено в „Моите записки“" : "Запази упражнението"}
+        {saved ? t("workspace.finish.saved") : t("workspace.finish.save")}
       </button>
       {saved && (
         <Link className="secondary" to="/notes">
-          Виж записките
+          {t("workspace.finish.viewNotes")}
         </Link>
       )}
     </div>
@@ -917,8 +1071,11 @@ function ExerciseWorkspace({
       </div>
       <p className="hint">
         {hidden
-          ? "Изтегляне без повторение"
-          : `${s.selected.length} / ${count} избрани · Натисни избрана карта отново, за да я върнеш.`}
+          ? t("workspace.drawNoRepeat")
+          : t("workspace.chooseHint", {
+              picked: s.selected.length,
+              total: count,
+            })}
       </p>
     </>
   );
@@ -928,7 +1085,7 @@ function ExerciseWorkspace({
         <div className="card-wrap" key={i}>
           <Card id={id} large onClick={() => inspect(id)} />
           <button className="inspect" onClick={() => inspect(id)}>
-            <Expand size={14} /> Разгледай
+            <Expand size={14} /> {t("common.inspect")}
           </button>
         </div>
       ))}
@@ -936,17 +1093,17 @@ function ExerciseWorkspace({
   );
   const topic = () => (
     <label className="field">
-      Какво искаш да изследваш?
+      {t("workspace.topic.label")}
       <input
         value={s.topic}
         onChange={(e) => update({ topic: e.target.value })}
-        placeholder="Тема, въпрос, ситуация…"
+        placeholder={t("workspace.topic.placeholder")}
       />
     </label>
   );
   const people = () => (
     <label className="field">
-      Брой участници
+      {t("workspace.people")}
       <input
         type="number"
         min={
@@ -997,10 +1154,10 @@ function ExerciseWorkspace({
   let lead: React.ReactNode = ex.description;
   let progress: React.ReactNode = null;
   let reset = {
-    label: "Отначало",
-    ask: "Започни това упражнение отначало?",
+    label: t("workspace.reset.label"),
+    ask: t("workspace.reset.ask"),
     run: () => {
-      set(initial(cards));
+      set(start(exerciseCards(ex.id)));
       setSaved(false);
     },
   };
@@ -1024,34 +1181,22 @@ function ExerciseWorkspace({
       />
     );
   } else if (base === "now" || base === "challenge") {
+    // `key` is the Bulgarian answer key the step is saved under (it must not
+    // change with the language); `id` picks the step's texts in the locale.
     const steps: {
-      title: string;
-      questions: string[];
+      key: string;
+      id: string;
       sentences?: string[];
       choice?: boolean;
     }[] =
       base === "now"
         ? [
+            { key: "Погледни картата", id: "look" },
+            { key: "Открий себе си в нея", id: "self" },
             {
-              title: "Погледни картата",
-              questions: [
-                "Какво те привлече в нея?",
-                "Какво се случва в изображението?",
-                "Каква е атмосферата?",
-                "Какво усещане предизвиква у теб?",
-              ],
-            },
-            {
-              title: "Открий себе си в нея",
-              questions: [
-                "Кое в картата най-силно отразява настоящото ти състояние?",
-                "Има ли детайл, образ или усещане, в което разпознаваш нещо от себе си?",
-                "Има ли нещо, което не си осъзнавал преди да я избереш?",
-              ],
-            },
-            {
-              title: "Довърши изреченията",
-              questions: [],
+              key: "Довърши изреченията",
+              id: "sentences",
+              // Each sentence prompt is also its answer key.
               sentences: [
                 "Точно сега се чувствам…",
                 "В момента най-много ме занимава…",
@@ -1060,89 +1205,74 @@ function ExerciseWorkspace({
                 "Иска ми се…",
               ],
             },
-            {
-              title: "Най-важното",
-              questions: [
-                "Кое от това, което откри, е най-важно за теб точно сега?",
-              ],
-            },
+            { key: "Най-важното", id: "important" },
           ]
         : [
-            {
-              title: "Погледни картата",
-              questions: [
-                "Какво в нея те отблъсква?",
-                "Какво чувство предизвиква у теб?",
-                "Какво ти се иска да избегнеш в този образ?",
-              ],
-            },
-            {
-              title: "Друга гледна точка",
-              questions: [
-                "Отвъд това, което те отблъсква, дразни или плаши, има ли нещо, което можеш да интерпретираш по различен начин?",
-                "Има ли нещо, което дори ти допада?",
-              ],
-            },
-            {
-              title: "Отново избор",
-              questions: [
-                "Тази карта все още ли би била последната, която би избрал?",
-              ],
-              choice: true,
-            },
+            { key: "Погледни картата", id: "look" },
+            { key: "Друга гледна точка", id: "perspective" },
+            { key: "Отново избор", id: "again", choice: true },
           ];
+    // Stored choice values stay Bulgarian; the buttons show the translation.
+    const choices = [
+      { value: "Да", id: "yes" },
+      { value: "Не", id: "no" },
+      { value: "Не съм сигурен", id: "unsure" },
+    ];
     const step = Math.min(s.stage, steps.length);
     const current = steps[step];
+    const stepText = current && `ex.${base}.steps.${current.id}`;
+    const questions = current ? tList(`${stepText}.questions`) : [];
+    const sentenceLabels = current?.sentences
+      ? tList(`${stepText}.sentences`)
+      : [];
     const card = s.selected[0];
     progress = <StepCount current={step + 1} total={steps.length + 1} />;
     lead =
       step === 0
-        ? base === "now"
-          ? "Избери карта, която най-силно те привлича в този момент."
-          : "Избери картата, която най-малко би искал да избереш."
+        ? t(`ex.${base}.pick`)
         : current
-          ? "Остани с избраната карта и потърси своите отговори."
-          : "Отдели момент за това, което искаш да вземеш със себе си.";
+          ? t("workspace.stayWithCard")
+          : t("workspace.finish.prompt");
     const panel = (
       <div className="side-panel">
         {current ? (
           <>
-            <h3>{current.title}</h3>
-            {current.questions.length > 0 && (
+            <h3>{t(`${stepText}.title`)}</h3>
+            {questions.length > 0 && (
               <ul className="questions">
-                {current.questions.map((q) => (
+                {questions.map((q) => (
                   <li key={q}>{q}</li>
                 ))}
               </ul>
             )}
             {current.sentences ? (
-              current.sentences.map((t) => (
-                <label className="mini-field" key={t}>
-                  {t}
+              current.sentences.map((sentence, i) => (
+                <label className="mini-field" key={sentence}>
+                  {sentenceLabels[i] ?? sentence}
                   <input
-                    value={s.answers[t] || ""}
-                    onChange={(e) => answer(t, e.target.value)}
+                    value={s.answers[sentence] || ""}
+                    onChange={(e) => answer(sentence, e.target.value)}
                   />
                 </label>
               ))
             ) : (
               <textarea
-                value={s.answers[current.title] || ""}
-                onChange={(e) => answer(current.title, e.target.value)}
-                placeholder="Запиши своите мисли тук…"
+                value={s.answers[current.key] || ""}
+                onChange={(e) => answer(current.key, e.target.value)}
+                placeholder={t("common.writeThoughts")}
               />
             )}
             {current.choice && (
               <div className="row">
-                {["Да", "Не", "Не съм сигурен"].map((v) => (
+                {choices.map(({ value, id }) => (
                   <button
                     className={
-                      s.answers["Избор"] === v ? "primary" : "secondary"
+                      s.answers["Избор"] === value ? "primary" : "secondary"
                     }
-                    onClick={() => answer("Избор", v)}
-                    key={v}
+                    onClick={() => answer("Избор", value)}
+                    key={value}
                   >
-                    {v}
+                    {t(`ex.${base}.choices.${id}`)}
                   </button>
                 ))}
               </div>
@@ -1153,21 +1283,23 @@ function ExerciseWorkspace({
                   className="secondary"
                   onClick={() => update({ stage: step - 1 })}
                 >
-                  Назад
+                  {t("workspace.back")}
                 </button>
               )}
-              {next("Продължи", !card, () => update({ stage: step + 1 }))}
+              {next(t("common.continue"), !card, () =>
+                update({ stage: step + 1 }),
+              )}
             </div>
           </>
         ) : (
           <>
-            <h3>Финален размисъл</h3>
+            <h3>{t("workspace.finalReflection")}</h3>
             {finish()}
             <button
               className="text-button"
               onClick={() => update({ stage: step - 1 })}
             >
-              Назад
+              {t("workspace.back")}
             </button>
           </>
         )}
@@ -1199,33 +1331,30 @@ function ExerciseWorkspace({
     const pair = ex.id.endsWith("pair");
     const n = pair ? 6 : 3;
     const done = s.selected.length;
-    const labels = [
-      "Къде съм сега?",
-      "Къде искам да бъда?",
-      "Какво ще ми помогне?",
-    ];
-    const hints = [
-      "Каква е настоящата ми ситуация? Как се чувствам?",
-      "Как изглежда желаното бъдеще? Как ще разбера, че съм там?",
-      "Какви ресурси, качества или стъпки ще ми помогнат?",
-    ];
+    // Answers are saved under these Bulgarian slot names plus the slot index
+    // (e.g. "Къде съм сега0") in every language; only the labels are translated.
+    const slotKeys = ["Къде съм сега", "Къде искам да бъда", "Какво ще ми помогне"];
+    const labels = tList("ex.bridge.labels");
+    const hints = tList("ex.bridge.hints");
     progress = <Steps current={done >= n ? 3 : (done % 3) + 1} total={3} />;
     lead =
-      done < n
-        ? "Изтегли по една карта за всяка позиция на моста."
-        : "Погледни трите карти като една обща картина.";
+      done < n ? t("ex.bridge.leadDraw") : t("ex.bridge.leadWhole");
     content = (
       <div className="board board-side">
         <div>
           {Array.from({ length: n / 3 }, (_, r) => (
             <div key={r}>
-              {pair && <p className="eyebrow">Участник {r + 1}</p>}
+              {pair && (
+                <p className="eyebrow">
+                  {t("ex.bridge.participant", { n: r + 1 })}
+                </p>
+              )}
               <div className="bridge-row">
                 {/* Drawn as now → future → helper, shown as now → helper → future. */}
                 {[0, 2, 1].map((k, j) => {
                   const i = r * 3 + k;
                   const id = s.selected[i];
-                  const key = labels[k].slice(0, -1) + i;
+                  const key = slotKeys[k] + i;
                   return (
                     <React.Fragment key={i}>
                       {j > 0 && <ArrowRight className="bridge-arrow" />}
@@ -1263,33 +1392,58 @@ function ExerciseWorkspace({
           ))}
           {done < n && (
             <p className="hint">
-              Следваща карта: {labels[done % 3]} · натисни нейния гръб.
+              {t("ex.bridge.nextCard", { label: labels[done % 3] ?? "" })}
             </p>
           )}
         </div>
         <div className="side-panel">
-          <h3>Моите размисли</h3>
+          <h3>{t("ex.bridge.reflections")}</h3>
           <label className="mini-field">
-            Тема
+            {t("ex.bridge.topic")}
             <input
               value={s.topic}
               onChange={(e) => update({ topic: e.target.value })}
-              placeholder="Тема, въпрос, ситуация…"
+              placeholder={t("workspace.topic.placeholder")}
             />
           </label>
           <textarea
             value={s.answers["Обща_картина"] || ""}
             onChange={(e) => answer("Обща_картина", e.target.value)}
             placeholder={
-              pair
-                ? "Какви сходства, различия и общи възможности виждате?"
-                : "Какво виждаш, когато разглеждаш трите карти като една обща картина?"
+              pair ? t("ex.bridge.wholePair") : t("ex.bridge.wholeSolo")
             }
           />
           {done === n && finish()}
         </div>
       </div>
     );
+  } else if (base === "future") {
+    content =
+      s.stage === 0 && !autoPick(cards) ? (
+        <>
+          <h2>{t("ex.future.pick")}</h2>
+          {choose(7)}
+          {next(t("ex.future.arrange"), s.selected.length < 5)}
+        </>
+      ) : (
+        <>
+          <h2>{t("ex.future.arrangeTitle")}</h2>
+          <p>{t("ex.future.arrangeHint")}</p>
+          <Composition
+            ids={s.selected}
+            positions={s.positions}
+            setPositions={(positions) => update({ positions })}
+            inspect={inspect}
+          />
+          {field("Описание", t("ex.future.descriptionLabel"))}
+          {field(
+            "Заглавие",
+            t("ex.future.titleLabel"),
+            t("ex.future.titlePlaceholder"),
+          )}
+          {finish()}
+        </>
+      );
   } else if (base === "essence") {
     const pick = (id: number) => {
       const winners = [...s.winners, id];
@@ -1317,23 +1471,23 @@ function ExerciseWorkspace({
     progress = <StepLine current={Math.min(s.stage, 2) + 1} total={3} />;
     lead =
       s.stage === 0 ? (
-        "Формулирай въпроса, с който искаш да стигнеш до същността."
+        t("ex.essence.leadTopic")
       ) : roundOver ? (
-        `Кръг ${s.round} завърши. Картите, които запази, продължават в следващия кръг.`
+        t("ex.essence.leadRoundOver", { round: s.round })
       ) : s.stage === 1 ? (
         <>
-          Погледни трите карти. Коя от тях най-много резонира с въпроса?
+          {t("ex.essence.leadPick1")}
           <br />
-          Следващата стъпка ще те доближи до същността.
+          {t("ex.essence.leadPick2")}
         </>
       ) : (
-        "Това е картата, която остана. Какво ти казва тя?"
+        t("ex.essence.leadFinal")
       );
     content =
       s.stage === 0 ? (
         <div className="paper narrow">
           {topic()}
-          {next("Разбъркай и започни", !s.topic.trim())}
+          {next(t("ex.essence.start"), !s.topic.trim())}
         </div>
       ) : roundOver ? (
         <div className="board board-side">
@@ -1341,7 +1495,9 @@ function ExerciseWorkspace({
             <p className="remaining">
               <Layers size={15} />
               <span>
-                Кръг {s.round} завърши · запазени <b>{s.winners.length}</b> карти
+                {t("ex.essence.roundKeptBefore", { round: s.round })}{" "}
+                <b>{s.winners.length}</b>{" "}
+                {t("ex.essence.roundKeptAfter", { count: s.winners.length })}
               </span>
             </p>
             <div className="spread deck-spread">
@@ -1349,14 +1505,20 @@ function ExerciseWorkspace({
                 <Card key={id} id={id} onClick={() => inspect(id)} />
               ))}
             </div>
-            {next(`Започни кръг ${s.round + 1}`, false, nextRound)}
+            {next(
+              t("ex.essence.startRound", { round: s.round + 1 }),
+              false,
+              nextRound,
+            )}
           </div>
           <div className="side-panel">
-            <h3>Въпрос на този етап:</h3>
+            <h3>{t("ex.essence.question")}</h3>
             <p className="question-box">{s.topic}</p>
             <p className="note-box">
-              В кръг {s.round + 1} ще избираш отново по една от три, само сред
-              тези {s.winners.length} карти.
+              {t("ex.essence.nextRoundNote", {
+                round: s.round + 1,
+                count: s.winners.length,
+              })}
             </p>
           </div>
         </div>
@@ -1366,9 +1528,11 @@ function ExerciseWorkspace({
             <p className="remaining">
               <Layers size={15} />
               <span>
-                Остават <b>{s.pool.length}</b> карти
+                {t("ex.essence.leftBefore", { count: s.pool.length })}{" "}
+                <b>{s.pool.length}</b>{" "}
+                {t("ex.essence.leftAfter", { count: s.pool.length })}
               </span>
-              <span>Кръг {s.round}</span>
+              <span>{t("ex.essence.round", { round: s.round })}</span>
             </p>
             <div className="tournament">
               {three.map((id) => (
@@ -1391,7 +1555,7 @@ function ExerciseWorkspace({
             </div>
             {s.winners.length > 0 && (
               <div className="winner-strip">
-                <small>Запазени в този кръг</small>
+                <small>{t("ex.essence.keptThisRound")}</small>
                 {s.winners.map((id) => (
                   <Card key={id} id={id} onClick={() => inspect(id)} />
                 ))}
@@ -1399,34 +1563,25 @@ function ExerciseWorkspace({
             )}
           </div>
           <div className="side-panel">
-            <h3>Въпрос на този етап:</h3>
+            <h3>{t("ex.essence.question")}</h3>
             <p className="question-box">{s.topic}</p>
-            <p className="note-box">
-              Щом избереш карта, продължаваме с нови три, за да стигнем до
-              най-същественото.
-            </p>
+            <p className="note-box">{t("ex.essence.pickNote")}</p>
           </div>
         </div>
       ) : (
         <div className="board board-focus">
           <Preview id={s.selected[0]} inspect={inspect} />
           <div className="side-panel">
-            <h3>Същността</h3>
-            {field("Връзка", "Как я свързваш с темата, от която тръгна?")}
-            {field(
-              "Нова_идея",
-              "Какво ново ти хрумва, когато я погледнеш сега?",
-            )}
-            {field(
-              "Действие",
-              "Хрумва ли ти нещо, което би искал да направиш?",
-            )}
+            <h3>{t("ex.essence.title")}</h3>
+            {field("Връзка", t("ex.essence.connection"))}
+            {field("Нова_идея", t("ex.essence.newIdea"))}
+            {field("Действие", t("ex.essence.action"))}
             {finish()}
           </div>
         </div>
       );
   } else if (base === "why") {
-    const ord = ["първото", "второто", "третото", "четвъртото", "петото"];
+    const ord = tList("ex.why.ordinals");
     const w = Math.min(Math.max(s.stage, 1), 6);
     const card = s.selected[w - 1];
     const prev = w === 1 ? s.topic : s.answers["Отговор_" + (w - 1)];
@@ -1440,8 +1595,8 @@ function ExerciseWorkspace({
     progress = <Steps current={Math.min(w, 5)} total={5} />;
     lead =
       w > 5
-        ? "Върни се към темата. Кой отговор те изненада най-много?"
-        : `Избери карта за ${ord[w - 1]} „защо“ и отговори на въпроса.`;
+        ? t("ex.why.leadDone")
+        : t("ex.why.lead", { ord: ord[w - 1] });
     content = (
       <div className="board board-why">
         <ol className="why-list">
@@ -1451,7 +1606,7 @@ function ExerciseWorkspace({
               className={i + 1 === w ? "current" : i + 1 < w ? "done" : ""}
             >
               <span className="num">{i + 1}</span>
-              <span>Защо това е важно за мен?</span>
+              <span>{t("ex.why.step")}</span>
               {s.selected[i] ? (
                 <Card
                   id={s.selected[i]}
@@ -1485,15 +1640,15 @@ function ExerciseWorkspace({
               </div>
               {!s.topic.trim() && (
                 <p className="hint">
-                  Първо запиши темата, после изтегли една от скритите карти.
+                  {t("ex.why.topicFirst")}
                 </p>
               )}
               <label className="field">
-                Защо „{prev || "това"}“ е важно за мен?
+                {t("ex.why.question", { prev: prev || t("ex.why.this") })}
                 <textarea
                   value={s.answers["Отговор_" + w] || ""}
                   onChange={(e) => answer("Отговор_" + w, e.target.value)}
-                  placeholder="Запиши отговора си тук…"
+                  placeholder={t("ex.why.answerPlaceholder")}
                   disabled={!card}
                 />
               </label>
@@ -1513,7 +1668,7 @@ function ExerciseWorkspace({
                       }
                       onClick={() => answer("Изненада", String(i))}
                     >
-                      Този ме изненада
+                      {t("ex.why.surprised")}
                     </button>
                   </div>
                 ))}
@@ -1523,8 +1678,10 @@ function ExerciseWorkspace({
           )}
         </div>
         <div className="side-panel">
-          <h3>Моята верига от отговори</h3>
-          {s.topic && <p className="small-note">Тема: {s.topic}</p>}
+          <h3>{t("ex.why.chain")}</h3>
+          {s.topic && (
+            <p className="small-note">{t("ex.why.topic", { topic: s.topic })}</p>
+          )}
           <ol className="chain-list">
             {Array.from({ length: 5 }, (_, i) => (
               <li key={i}>
@@ -1539,12 +1696,12 @@ function ExerciseWorkspace({
                 className="secondary"
                 onClick={() => update({ stage: w - 1 })}
               >
-                Назад
+                {t("ex.why.back")}
               </button>
             )}
             {w <= 5 &&
               next(
-                "Продължи",
+                t("common.continue"),
                 !card || !s.answers["Отговор_" + w]?.trim(),
                 () => update({ stage: w + 1 }),
               )}
@@ -1553,15 +1710,7 @@ function ExerciseWorkspace({
       </div>
     );
   } else if (base === "dialogue") {
-    const inspiration = [
-      "Какво виждаш в мен?",
-      "Какво е важно да знам сега?",
-      "Какво ме спира?",
-      "Какъв съвет би ми дала?",
-      "Какво не забелязвам?",
-      "Каква е първата стъпка?",
-      "Какво още?",
-    ];
+    const inspiration = tList("ex.dialogue.inspiration");
     // Even lines are mine, odd lines are the card's.
     const cardTurn = s.lines.length % 2 === 1;
     const send = () => {
@@ -1571,12 +1720,12 @@ function ExerciseWorkspace({
     };
     lead =
       s.stage === 0
-        ? "Запиши темата си и изтегли скрита карта."
-        : "Проведи диалог с избраната карта. Пиши свободно, без да цензурираш отговорите.";
+        ? t("ex.dialogue.leadStart")
+        : t("ex.dialogue.lead");
     if (s.stage > 0)
       reset = {
-        label: "Изчисти",
-        ask: "Да изчистя ли разговора?",
+        label: t("common.clear"),
+        ask: t("ex.dialogue.clearAsk"),
         run: () =>
           update({ lines: [], answers: { ...s.answers, Изречение: "" } }),
       };
@@ -1592,11 +1741,11 @@ function ExerciseWorkspace({
                 selected: [s.pool[0]],
                 pool: s.pool.slice(1),
                 stage: 1,
-                lines: [FIRST_LINE],
+                lines: [t("ex.dialogue.firstLine")],
               })
             }
           />
-          <p className="hint">Натисни картата, за да я изтеглиш.</p>
+          <p className="hint">{t("ex.dialogue.drawHint")}</p>
         </div>
       ) : (
         <>
@@ -1606,7 +1755,9 @@ function ExerciseWorkspace({
               <div className="chat-lines">
                 {s.lines.map((line, i) => (
                   <div className={`chat-row ${i % 2 ? "card-says" : ""}`} key={i}>
-                    <b>{i % 2 ? "КАРТАТА:" : "АЗ:"}</b>
+                    <b>
+                      {i % 2 ? t("ex.dialogue.card") : t("ex.dialogue.me")}:
+                    </b>
                     <textarea
                       rows={1}
                       value={line}
@@ -1619,8 +1770,8 @@ function ExerciseWorkspace({
                       }
                       placeholder={
                         i % 2
-                          ? "Какво ти хрумва от името на картата?"
-                          : "Твоят въпрос"
+                          ? t("ex.dialogue.cardPlaceholder")
+                          : t("ex.dialogue.mePlaceholder")
                       }
                     />
                   </div>
@@ -1633,20 +1784,22 @@ function ExerciseWorkspace({
                   send();
                 }}
               >
-                <span>{cardTurn ? "КАРТАТА" : "АЗ"}</span>
+                <span>
+                  {cardTurn ? t("ex.dialogue.card") : t("ex.dialogue.me")}
+                </span>
                 <input
                   value={draftLine}
                   onChange={(e) => setDraftLine(e.target.value)}
                   placeholder={
                     cardTurn
-                      ? "Какво отговаря картата?…"
-                      : "Продължи диалога…"
+                      ? t("ex.dialogue.cardDraft")
+                      : t("ex.dialogue.meDraft")
                   }
                 />
                 <button
                   className="send"
                   type="submit"
-                  aria-label="Изпрати"
+                  aria-label={t("ex.dialogue.send")}
                   disabled={!draftLine.trim()}
                 >
                   <Send size={18} />
@@ -1654,7 +1807,7 @@ function ExerciseWorkspace({
               </form>
             </div>
             <div className="side-panel">
-              <h3>Въпроси за вдъхновение</h3>
+              <h3>{t("ex.dialogue.inspirationTitle")}</h3>
               <ol className="inspiration">
                 {inspiration.map((q) => (
                   <li key={q}>
@@ -1676,11 +1829,11 @@ function ExerciseWorkspace({
                 disabled={saved || s.lines.filter((l) => l.trim()).length < 2}
               >
                 <Save size={16} />
-                {saved ? "Запазено в „Моите записки“" : "Запази разговора"}
+                {saved ? t("ex.dialogue.saved") : t("ex.dialogue.save")}
               </button>
               {saved && (
                 <Link className="text-button" to="/notes">
-                  Виж записките
+                  {t("ex.dialogue.viewNotes")}
                 </Link>
               )}
             </div>
@@ -1688,7 +1841,7 @@ function ExerciseWorkspace({
           {s.lines.some((l, i) => i % 2 && l.trim()) && (
             <div className="paper dialogue-after">
               <h3>
-                Отбележи изречението, което най-силно те докосна или изненада.
+                {t("ex.dialogue.sentenceTitle")}
               </h3>
               {s.lines
                 .filter((_, i) => i % 2)
@@ -1707,7 +1860,7 @@ function ExerciseWorkspace({
                     {l}
                   </button>
                 ))}
-              {field("Финален_размисъл", "Какво откри в този разговор?")}
+              {field("Финален_размисъл", t("ex.dialogue.reflection"))}
             </div>
           )}
         </>
@@ -1720,15 +1873,19 @@ function ExerciseWorkspace({
     const cards = dealt ? s.selected : s.pool.slice(0, total);
     lead =
       s.turn < total
-        ? "Картите са скрити. Редувайте се и запазвайте вече разказаното."
-        : "Историята е готова. Дайте ѝ заглавие.";
+        ? t("ex.story.lead")
+        : t("ex.story.leadDone");
     content = (
       <>
         {!dealt && ex.category !== 1 && people()}
         <div className="story-cards">
           {cards.map((id, i) => (
             <div key={i}>
-              <small>{i === total - 1 ? "ФИНАЛ" : `Ход ${i + 1}`}</small>
+              <small>
+                {i === total - 1
+                  ? t("ex.story.final")
+                  : t("ex.story.turn", { n: i + 1 })}
+              </small>
               <Card
                 id={id}
                 hidden={i > s.turn || (i === s.turn && !s.revealed)}
@@ -1750,7 +1907,9 @@ function ExerciseWorkspace({
           <div className="paper story-text">
             {s.lines.map((l, i) => (
               <p key={i}>
-                <small>Участник {(i % players) + 1}</small>
+                <small>
+                  {t("ex.story.participant", { n: (i % players) + 1 })}
+                </small>
                 {l}
               </p>
             ))}
@@ -1759,21 +1918,21 @@ function ExerciseWorkspace({
         {s.turn < total ? (
           <>
             <h2>
-              Участник {(s.turn % players) + 1} ·{" "}
+              {t("ex.story.participant", { n: (s.turn % players) + 1 })} ·{" "}
               {s.turn === 0
-                ? "Започни историята"
+                ? t("ex.story.begin")
                 : s.turn === total - 1
-                  ? "Завърши историята"
-                  : "Продължи историята"}
+                  ? t("ex.story.end")
+                  : t("ex.story.continue")}
             </h2>
             {s.revealed ? (
               <>
                 {field(
                   "Текущ_разказ",
-                  "Добави 2–3 изречения, вдъхновени от новата карта.",
+                  t("ex.story.addLabel"),
                 )}
                 {next(
-                  "Запази този ход",
+                  t("ex.story.saveTurn"),
                   !s.answers["Текущ_разказ"]?.trim(),
                   () =>
                     update({
@@ -1786,14 +1945,14 @@ function ExerciseWorkspace({
               </>
             ) : (
               <p className="hint">
-                Натисни картата за ход {s.turn + 1}, за да я обърнеш.
+                {t("ex.story.flipHint", { n: s.turn + 1 })}
               </p>
             )}
           </>
         ) : (
           <>
-            {field("Заглавие", "Как ще се казва историята?")}
-            {field("Обрат", "Кой обрат те изненада най-много?")}
+            {field("Заглавие", t("ex.story.titleLabel"))}
+            {field("Обрат", t("ex.story.twistLabel"))}
             {finish()}
           </>
         )}
@@ -1803,12 +1962,9 @@ function ExerciseWorkspace({
     content =
       s.stage === 0 ? (
         <>
-          <h2>
-            Участник {s.selected.length + 1}: избери изображение, което те
-            грабва.
-          </h2>
+          <h2>{t("ex.coffee.pick", { n: s.selected.length + 1 })}</h2>
           {choose(2)}
-          {next("Започнете разговора", s.selected.length < 2)}
+          {next(t("ex.coffee.start"), s.selected.length < 2)}
         </>
       ) : (
         <div className="focused">
@@ -1819,22 +1975,19 @@ function ExerciseWorkspace({
               onClick={() => inspect(s.selected[s.turn % 2])}
             />
             <p>
-              Разказва участник {(s.turn % 2) + 1} · Слуша участник{" "}
-              {((s.turn + 1) % 2) + 1}
+              {t("ex.coffee.roles", {
+                speaker: (s.turn % 2) + 1,
+                listener: ((s.turn + 1) % 2) + 1,
+              })}
             </p>
           </div>
           <div>
-            <h2>Разкажи ми повече…</h2>
-            {field(
-              "Разказ_" + s.turn,
-              "Какво те привлече? Какви асоциации, спомени или желания събужда образът?",
-            )}
-            {field(
-              "Обобщение_" + s.turn,
-              "Слушател: Разбирам, че… Правилно ли те разбрах?",
-            )}
+            <h2>{t("ex.coffee.tellMore")}</h2>
+            {field("Разказ_" + s.turn, t("ex.coffee.storyLabel"))}
+            {field("Обобщение_" + s.turn, t("ex.coffee.summaryLabel"))}
             <div className="row">
-              {["Потвърждавам", "Допълвам", "Поправям"].map((v) => (
+              {/* The Bulgarian choice is stored; its translation is shown. */}
+              {translateList("bg", "ex.coffee.checks").map((v, i) => (
                 <button
                   key={v}
                   className={
@@ -1844,22 +1997,19 @@ function ExerciseWorkspace({
                   }
                   onClick={() => answer("Проверка_" + s.turn, v)}
                 >
-                  {v}
+                  {tList("ex.coffee.checks")[i] ?? v}
                 </button>
               ))}
             </div>
-            {field(
-              "Уточнение_" + s.turn,
-              "Допълнение или поправка (по желание)",
-            )}
-            {next("Разменете ролите", false, () =>
+            {field("Уточнение_" + s.turn, t("ex.coffee.clarifyLabel"))}
+            {next(t("ex.coffee.switch"), false, () =>
               update({ turn: s.turn + 1 }),
             )}
             <button
               className="secondary"
               onClick={() => update({ stage: 0, selected: [] })}
             >
-              Още една карта
+              {t("ex.coffee.another")}
             </button>
             {s.turn > 0 && finish()}
           </div>
@@ -1870,7 +2020,7 @@ function ExerciseWorkspace({
       <>
         {!s.selected.length ? (
           <>
-            <p>Една и съща карта за проблем и решение.</p>
+            <p>{t("ex.perspective.intro")}</p>
             <Card
               id={0}
               hidden
@@ -1886,30 +2036,34 @@ function ExerciseWorkspace({
               <div className="two-columns">
                 {field(
                   "Проблем_" + s.turn,
-                  `Участник ${(s.turn % 2) + 1} · Въображаем проблем`,
+                  t("ex.perspective.problem", { n: (s.turn % 2) + 1 }),
                 )}
                 {field(
                   "Решение_" + s.turn,
-                  `Участник ${((s.turn + 1) % 2) + 1} · Решение от същия образ`,
+                  t("ex.perspective.solution", { n: ((s.turn + 1) % 2) + 1 }),
                 )}
-                {field("Въпрос_" + s.turn, "Един уточняващ въпрос")}
-                {field("Уточнение_" + s.turn, "Отговор и допълване на идеята")}
+                {field("Въпрос_" + s.turn, t("ex.perspective.question"))}
+                {field("Уточнение_" + s.turn, t("ex.perspective.clarify"))}
               </div>
             </div>
-            {next("Нов кръг · размени ролите", false, () =>
+            {next(t("ex.perspective.nextRound"), false, () =>
               update({
                 selected: [s.pool[0]],
                 pool: s.pool.slice(1),
                 turn: s.turn + 1,
                 lines: [
                   ...s.lines,
-                  `Карта ${s.selected[0]} · ${s.answers["Проблем_" + s.turn] || ""} → ${s.answers["Решение_" + s.turn] || ""}`,
+                  t("ex.perspective.log", {
+                    card: s.selected[0],
+                    problem: s.answers["Проблем_" + s.turn] || "",
+                    solution: s.answers["Решение_" + s.turn] || "",
+                  }),
                 ],
               }),
             )}
             {field(
               "Променена_гледна_точка",
-              "Коя използвана карта вече виждате по различен начин?",
+              t("ex.perspective.changedLabel"),
             )}
             {finish()}
           </>
@@ -1923,10 +2077,10 @@ function ExerciseWorkspace({
           {people()}
           <p>
             {base === "cluster"
-              ? "Подредете картите в групи без думи. След пет минути обсъдете връзките."
-              : "Изтеглете карта и я поставете при едно или между две чувства. Можете да смените своята карта."}
+              ? t("ex.cluster.intro")
+              : t("ex.feelings.intro")}
           </p>
-          {next("Раздай по една карта", false, () => {
+          {next(t("ex.cluster.deal"), false, () => {
             deal(1);
             update({ timer: base === "cluster" ? 300 : 0 });
           })}
@@ -1935,8 +2089,8 @@ function ExerciseWorkspace({
         <>
           <div className="table-labels">
             {(base === "feelings"
-              ? ["Радост", "Тъга", "Страх", "Гняв", "Отвращение"]
-              : ["Група 1", "Група 2", "Група 3"]
+              ? tList("ex.feelings.emotions")
+              : [1, 2, 3].map((n) => t("ex.cluster.group", { n }))
             ).map((l) => (
               <span key={l}>{l}</span>
             ))}
@@ -1972,11 +2126,11 @@ function ExerciseWorkspace({
                       });
                     }}
                   >
-                    Смени карта · {i + 1}
+                    {t("ex.feelings.swap", { n: i + 1 })}
                   </button>
                 ))}
               </div>
-              {field("Обяснения", "Тази карта ми напомня за…, защото…")}
+              {field("Обяснения", t("ex.feelings.explanations"))}
             </>
           )}
           {(s.stage >= 2 || base === "feelings") && (
@@ -1984,14 +2138,14 @@ function ExerciseWorkspace({
               {field(
                 "Връзки",
                 base === "cluster"
-                  ? "Какво свързва тези карти?"
-                  : "Някой вижда ли друго чувство в някоя от картите?",
+                  ? t("ex.cluster.connections")
+                  : t("ex.feelings.connections"),
               )}
               {field(
                 "Преживяване",
                 base === "cluster"
-                  ? "Как успяхте да се разберете без думи? Какво ви изненада? Какво помогна на всеки да намери своето място?"
-                  : "Човек се чувства така, когато…",
+                  ? t("ex.cluster.experience")
+                  : t("ex.feelings.experience"),
               )}
               <button
                 className="secondary"
@@ -2003,7 +2157,7 @@ function ExerciseWorkspace({
                   });
                 }}
               >
-                Нов кръг · нови карти
+                {t("ex.cluster.newRound")}
               </button>
               {base === "cluster" && (
                 <button
@@ -2012,7 +2166,7 @@ function ExerciseWorkspace({
                     update({ stage: 1, timer: 300, positions: {} })
                   }
                 >
-                  Същите карти · различен признак
+                  {t("ex.cluster.sameCards")}
                 </button>
               )}
               {finish()}
@@ -2025,18 +2179,20 @@ function ExerciseWorkspace({
       s.stage === 0 ? (
         <>
           {people()}
-          {next("Раздай картите", false, () => deal(1))}
+          {next(t("ex.words.deal"), false, () => deal(1))}
         </>
       ) : (
         <>
-          <h2>Кръг {s.round} · Картите остават. Думите се движат наляво.</h2>
+          <h2>{t("ex.words.round", { n: s.round })}</h2>
           <div className="participants">
             {s.hands.map((h, i) => (
               <section className="paper" key={i}>
-                <h3>Участник {i + 1}</h3>
+                <h3>{t("ex.words.participant", { n: i + 1 })}</h3>
                 <Card id={h[0]} onClick={() => inspect(h[0])} />
                 <label className="field">
-                  {s.round === 1 ? "Една свързана дума" : "Получена дума"}
+                  {s.round === 1
+                    ? t("ex.words.firstWord")
+                    : t("ex.words.received")}
                   <input
                     value={s.words[i] || ""}
                     readOnly={s.round > 1}
@@ -2051,13 +2207,13 @@ function ExerciseWorkspace({
                 </label>
                 {field(
                   `Връзка_${s.round}_${i}`,
-                  "Как свързвам думата с моята карта?",
+                  t("ex.words.link"),
                 )}
               </section>
             ))}
           </div>
           {next(
-            "Предай думите наляво",
+            t("ex.words.pass"),
             s.words.filter(Boolean).length < s.people,
             () =>
               update({
@@ -2067,7 +2223,7 @@ function ExerciseWorkspace({
           )}
           {field(
             "Промяна",
-            "Промени ли смяната на думите начина, по който виждаш картата?",
+            t("ex.words.change"),
           )}
           {finish()}
         </>
@@ -2077,15 +2233,15 @@ function ExerciseWorkspace({
       s.stage === 0 ? (
         <>
           {people()}
-          <p>55 карти позволяват до 18 участници с по три карти.</p>
-          {next("Раздай по три карти", false, () => deal(3))}
+          <p>{t("ex.market.capacity")}</p>
+          {next(t("ex.market.deal"), false, () => deal(3))}
         </>
       ) : (
         <>
           <div className="participants">
             {s.hands.map((h, i) => (
               <section className="paper" key={i}>
-                <h3>Участник {i + 1}</h3>
+                <h3>{t("ex.market.participant", { n: i + 1 })}</h3>
                 <div className="row">
                   {h.map((id) => (
                     <div key={id}>
@@ -2095,8 +2251,8 @@ function ExerciseWorkspace({
                         onClick={() => answer("Важна_" + i, String(id))}
                       />
                       <input
-                        aria-label={`Ценност за карта ${id}`}
-                        placeholder="Моята ценност…"
+                        aria-label={t("ex.market.valueFor", { id })}
+                        placeholder={t("ex.market.valuePlaceholder")}
                         value={s.answers["Ценност_" + id] || ""}
                         onChange={(e) =>
                           answer("Ценност_" + id, e.target.value)
@@ -2105,7 +2261,7 @@ function ExerciseWorkspace({
                     </div>
                   ))}
                 </div>
-                <p>Избери една важна ценност, като натиснеш картата.</p>
+                <p>{t("ex.market.pickValue")}</p>
               </section>
             ))}
           </div>
@@ -2118,12 +2274,15 @@ function ExerciseWorkspace({
             }}
           />
           <Timer seconds={420} />
-          <h2>Групи от 3–4 · Общо събитие</h2>
+          <h2>{t("ex.market.groupsTitle")}</h2>
           {Array.from({ length: Math.ceil(s.people / 4) }, (_, i) => (
             <section key={i}>
               {field(
                 "Група_" + i,
-                `Група ${i + 1} (участници ${groupMembers(s.people, i).join(", ")}): как ще дадете място на ценността на всеки? Запишете 3 конкретни решения.`,
+                t("ex.market.groupTask", {
+                  n: i + 1,
+                  members: groupMembers(s.people, i).join(", "),
+                }),
               )}
             </section>
           ))}
@@ -2153,19 +2312,16 @@ function ExerciseWorkspace({
       s.stage === 0 ? (
         <>
           {people()}
-          <p>
-            Разделете се на групи по 4–6. Личната тема може да остане
-            несподелена.
-          </p>
-          {next("Избирайте по две карти", false, () =>
+          <p>{t("ex.trust.intro")}</p>
+          {next(t("ex.trust.start"), false, () =>
             update({ stage: 1, selected: [] }),
           )}
         </>
       ) : s.stage === 1 ? (
         <>
-          <h2>Участник {s.turn + 1}: избери две карти.</h2>
+          <h2>{t("ex.trust.pickTwo", { n: s.turn + 1 })}</h2>
           {choose(2)}
-          {next("Потвърди избора", s.selected.length < 2, () => {
+          {next(t("ex.trust.confirm"), s.selected.length < 2, () => {
             const hands = [...s.hands, s.selected];
             update({
               hands,
@@ -2179,25 +2335,19 @@ function ExerciseWorkspace({
         </>
       ) : (
         <>
-          <h2>
-            Участник {s.turn + 1} · Слушай и вземи това, което има смисъл за
-            теб.
-          </h2>
+          <h2>{t("ex.trust.listen", { n: s.turn + 1 })}</h2>
           {selected()}
-          <p>
-            Говорим от свое име. Без отгатване на личната тема, тълкуване на
-            човека или съвети.
-          </p>
-          {field("Моят_образ_" + s.turn, "Какво виждам в своите изображения?")}
+          <p>{t("ex.trust.rules")}</p>
+          {field("Моят_образ_" + s.turn, t("ex.trust.myImage"))}
           {Array.from({ length: Math.min(s.people - 1, 5) }, (_, i) =>
             field(
               `Асоциация_${s.turn}_${i}`,
-              `Глас ${i + 1}: Аз виждам… / На мен ми напомня… / За мен тези изображения…`,
+              t("ex.trust.voice", { n: i + 1 }),
             ),
           )}
-          {field("Взимам_" + s.turn, "Какво взимам от чутото?")}
+          {field("Взимам_" + s.turn, t("ex.trust.takeAway"))}
           {s.turn + 1 < s.people &&
-            next("Следващ участник", false, () =>
+            next(t("ex.trust.nextParticipant"), false, () =>
               update({ turn: s.turn + 1, selected: s.hands[s.turn + 1] }),
             )}
           {finish()}
@@ -2207,36 +2357,33 @@ function ExerciseWorkspace({
     const teams = Math.ceil(s.people / 4);
     const phases = [
       {
-        title: "Идеи",
+        title: t("ex.mission.ideasTitle"),
         minutes: 10,
-        text: "Генерирайте поне три идеи от детайли, форми, настроение или асоциации.",
+        text: t("ex.mission.ideasText"),
       },
       {
-        title: "Общо решение",
+        title: t("ex.mission.solutionTitle"),
         minutes: 5,
-        text: "Съчетайте вдъхновение от трите карти в общо решение.",
+        text: t("ex.mission.solutionText"),
       },
       {
-        title: "Представяне",
+        title: t("ex.mission.presentTitle"),
         minutes: 3,
-        text: "Представете решението. Друг отбор задава един въпрос.",
+        text: t("ex.mission.presentText"),
       },
     ];
     const phase = phases[Math.min(s.stage, 3) - 1];
     if (phase) progress = <Steps current={s.stage} total={3} />;
     lead = phase
-      ? `${phase.minutes} минути · ${phase.text}`
-      : "Формулирайте общото предизвикателство и разделете участниците на отбори.";
+      ? t("ex.mission.phaseLead", { count: phase.minutes, text: phase.text })
+      : t("ex.mission.lead");
     content =
       s.stage === 0 ? (
         <div className="paper narrow">
           {people()}
           {topic()}
-          <p className="hint">
-            {teams} {teams === 1 ? "отбор" : "отбора"} · всеки получава по три
-            скрити карти.
-          </p>
-          {next("Раздай по три карти на отбор", !s.topic.trim(), () => {
+          <p className="hint">{t("ex.mission.teams", { count: teams })}</p>
+          {next(t("ex.mission.deal"), !s.topic.trim(), () => {
             const pool = shuffle(cards);
             update({
               hands: Array.from({ length: teams }, (_, i) =>
@@ -2251,7 +2398,7 @@ function ExerciseWorkspace({
         <>
           <div className="mission-bar">
             <div>
-              <small>Мисия</small>
+              <small>{t("ex.mission.mission")}</small>
               <h2>{s.topic}</h2>
             </div>
             <Timer seconds={phase.minutes * 60} />
@@ -2259,9 +2406,11 @@ function ExerciseWorkspace({
           {s.hands.map((h, i) => (
             <section className="team" key={i}>
               <div className="team-cards">
-                <h3>Отбор {i + 1}</h3>
+                <h3>{t("ex.mission.team", { n: i + 1 })}</h3>
                 <p className="small-note">
-                  Участници {groupMembers(s.people, i).join(", ")}
+                  {t("ex.mission.members", {
+                    members: groupMembers(s.people, i).join(", "),
+                  })}
                 </p>
                 <div className="team-card-row">
                   {h.map((id) => (
@@ -2271,20 +2420,19 @@ function ExerciseWorkspace({
               </div>
               <div className="team-work">
                 <h3>
-                  Фаза {s.stage} · {phase.title}
+                  {t("ex.mission.phase", { n: s.stage, title: phase.title })}
                 </h3>
                 {s.stage === 1 ? (
-                  [1, 2, 3].map((j) => field(`Идея_${i}_${j}`, `Идея ${j}`))
+                  [1, 2, 3].map((j) =>
+                    field(`Идея_${i}_${j}`, t("ex.mission.idea", { n: j })),
+                  )
                 ) : s.stage === 2 ? (
-                  field("Решение_" + i, "Нашето общо решение")
+                  field("Решение_" + i, t("ex.mission.ourSolution"))
                 ) : (
                   <>
-                    {field(
-                      "Представяне_" + i,
-                      "Как всяка карта допринесе за решението?",
-                    )}
-                    {field("Въпрос_" + i, "Един въпрос от друг отбор")}
-                    {field("Отговор_" + i, "Отговор и уточнение")}
+                    {field("Представяне_" + i, t("ex.mission.howCards"))}
+                    {field("Въпрос_" + i, t("ex.mission.question"))}
+                    {field("Отговор_" + i, t("ex.mission.answer"))}
                   </>
                 )}
               </div>
@@ -2296,12 +2444,12 @@ function ExerciseWorkspace({
                 className="secondary"
                 onClick={() => update({ stage: s.stage - 1 })}
               >
-                Назад
+                {t("ex.mission.back")}
               </button>
             )}
             {s.stage < 3 &&
               next(
-                "Следваща фаза",
+                t("ex.mission.nextPhase"),
                 s.stage === 1 &&
                   s.hands.some((_, i) =>
                     [1, 2, 3].some((j) => !s.answers[`Идея_${i}_${j}`]?.trim()),
@@ -2315,23 +2463,20 @@ function ExerciseWorkspace({
     content =
       s.stage === 0 ? (
         <>
-          <h2>Избери карта, около която искаш да създадеш свят.</h2>
+          <h2>{t("ex.draw.pick")}</h2>
           {choose()}
-          {next("Започни да рисуваш", !s.selected.length)}
+          {next(t("ex.draw.start"), !s.selected.length)}
         </>
       ) : (
         <>
-          <h2>Какво има извън краищата на картата?</h2>
-          <p>Рисувай около изображението. Кой или какво може да има наблизо?</p>
+          <h2>{t("ex.draw.beyond")}</h2>
+          <p>{t("ex.draw.hint")}</p>
           <Drawing
             id={s.selected[0]}
             strokes={s.strokes}
             onChange={(strokes) => update({ strokes })}
           />
-          {field(
-            "Моят_свят",
-            "Какво добави? Какво в картата ти подсказа тези идеи?",
-          )}
+          {field("Моят_свят", t("ex.draw.myWorld"))}
           {finish()}
         </>
       );
@@ -2340,7 +2485,7 @@ function ExerciseWorkspace({
       s.stage === 0 ? (
         <>
           {people()}
-          {next("Изтегли имената", false, () => {
+          {next(t("ex.gift.drawNames"), false, () => {
             const order = shuffle(
               Array.from({ length: s.people }, (_, i) => i),
             );
@@ -2354,29 +2499,28 @@ function ExerciseWorkspace({
       ) : (
         <>
           <h2>
-            Участник {s.turn + 1} подарява на участник {s.order[s.turn] + 1}
+            {t("ex.gift.givesTo", {
+              from: s.turn + 1,
+              to: s.order[s.turn] + 1,
+            })}
           </h2>
-          <p>
-            Помисли какво харесва другото дете, за какво мечтае и какво би го
-            зарадвало.
-          </p>
+          <p>{t("ex.gift.think")}</p>
           {choose(1, false, (id) => update({ selected: [id] }))}
           {s.selected.length > 0 && (
             <>
-              {field(
-                "Подарък_" + s.turn,
-                "Подарявам ти тази карта, защото знам, че обичаш…",
-              )}
-              {field(
-                "Получател_" + s.turn,
-                "Получател: какво означава подаръкът за мен? (по желание)",
-              )}
+              {field("Подарък_" + s.turn, t("ex.gift.giftLine"))}
+              {field("Получател_" + s.turn, t("ex.gift.recipient"))}
               {s.turn + 1 < s.people ? (
-                next("Подари · следващ участник", false, () =>
+                next(t("ex.gift.giveNext"), false, () =>
                   update({
                     lines: [
                       ...s.lines,
-                      `${s.turn + 1} → ${s.order[s.turn] + 1}: карта ${s.selected[0]}`,
+                      // A readable log line, in the language used while playing.
+                      t("ex.gift.logLine", {
+                        from: s.turn + 1,
+                        to: s.order[s.turn] + 1,
+                        card: s.selected[0],
+                      }),
                     ],
                     turn: s.turn + 1,
                     selected: [],
@@ -2384,10 +2528,7 @@ function ExerciseWorkspace({
                 )
               ) : (
                 <>
-                  {field(
-                    "Чувство",
-                    "Какво беше чувството да изберете и да получите подарък?",
-                  )}
+                  {field("Чувство", t("ex.gift.feeling"))}
                   {finish()}
                 </>
               )}
@@ -2399,8 +2540,12 @@ function ExerciseWorkspace({
   return (
     <div className="workspace">
       <header className="exercise-header">
-        <Link className="back" to="/exercises">
-          <ArrowLeft size={16} /> Към упражненията
+        <Link
+          className="back"
+          to={(location.state as { back?: string } | null)?.back ?? "/exercises"}
+          state={{ from: ex.id }}
+        >
+          <ArrowLeft size={16} /> {t("shell.back")}
         </Link>
         <div className="exercise-title">
           <h1>{ex.title}</h1>
@@ -2422,28 +2567,28 @@ function ExerciseWorkspace({
               }
             }}
           >
-            {reset.label === "Изчисти" && <Trash2 size={14} />}
+            {reset.label === t("common.clear") && <Trash2 size={14} />}
             {reset.label}
           </button>
         </div>
       </header>
       {resumed && (
         <div className="resume-note">
-          <span>Продължаваш оттам, докъдето стигна последния път.</span>
+          <span>{t("shell.resumed")}</span>
           <button
             className="text-button"
             onClick={() => {
-              set(initial(cards));
+              set(start(exerciseCards(ex.id)));
               setSaved(false);
               setResumed(false);
             }}
           >
-            Започни отначало
+            {t("shell.restart")}
           </button>
           <button
             className="resume-close"
             onClick={() => setResumed(false)}
-            aria-label="Скрий"
+            aria-label={t("shell.hide")}
           >
             <X size={14} />
           </button>
@@ -2454,11 +2599,8 @@ function ExerciseWorkspace({
           {ex.adaptation}
           {ex.id.endsWith("pair") && (
             <>
-              {field(
-                "Наблюдател",
-                "Наблюдател: уточняващ въпрос или обобщение",
-              )}
-              <p>„Разкажи ми повече…“ · „Правилно ли те разбрах?“</p>
+              {field("Наблюдател", t("shell.observer"))}
+              <p>{t("shell.observerPrompts")}</p>
             </>
           )}
         </div>
@@ -2467,25 +2609,25 @@ function ExerciseWorkspace({
         <div className="facilitator">
           <Users size={17} />
           <span>
-            Режим за водещ · Общуване на живо, работа на едно устройство
-            {ex.category === 3
-              ? " · Участието и споделянето са по желание."
-              : ""}
+            {t("shell.facilitator")}
+            {ex.category === 3 ? t("shell.optional") : ""}
           </span>
         </div>
       )}
       <div className="exercise-content">{content}</div>
       <footer>
-        По „Работа с метафорични карти“, Яна Аврамова · с. {ex.page} ·
-        Значението на образа определяш ти. · Отговорите се запазват
-        автоматично в този браузър.
+        {t("shell.footer", { page: ex.page })}
+        <div className="copyright">
+          {t("common.copyright", { year: new Date().getFullYear() })}
+        </div>
       </footer>
     </div>
   );
 }
 function Steps({ current, total }: { current: number; total: number }) {
+  const { t } = useI18n();
   return (
-    <ol className="steps" aria-label={`Стъпка ${current} от ${total}`}>
+    <ol className="steps" aria-label={t("steps.of", { current, total })}>
       {Array.from({ length: total }, (_, i) => (
         <li
           key={i}
@@ -2500,6 +2642,7 @@ function Steps({ current, total }: { current: number; total: number }) {
   );
 }
 function StepLine({ current, total }: { current: number; total: number }) {
+  const { t } = useI18n();
   return (
     <div className="step-line">
       <div
@@ -2514,7 +2657,7 @@ function StepLine({ current, total }: { current: number; total: number }) {
           <i key={i} className={i < current ? "on" : ""} />
         ))}
       </div>
-      Стъпка {current} от {total}
+      {t("steps.of", { current, total })}
     </div>
   );
 }
@@ -2533,18 +2676,20 @@ function Preview({
   id?: number;
   inspect: (id: number) => void;
 }) {
-  if (!id) return <div className="preview empty-slot">Избери карта</div>;
+  const { t } = useI18n();
+  if (!id)
+    return <div className="preview empty-slot">{t("preview.choose")}</div>;
   return (
     <div className="preview">
       <img
         src={cardSrc(id)}
-        alt={`Метафорична карта ${cardLabel(id)}`}
+        alt={t("preview.alt", { label: cardLabel(id) })}
         onClick={() => inspect(id)}
       />
       <button
         className="preview-expand"
         onClick={() => inspect(id)}
-        aria-label="Разгледай отблизо"
+        aria-label={t("preview.zoom")}
       >
         <Expand size={16} />
       </button>
@@ -2562,6 +2707,7 @@ function Composition({
   setPositions: (p: State["positions"]) => void;
   inspect: (id: number) => void;
 }) {
+  const { t } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef<{
     id: number;
@@ -2626,7 +2772,7 @@ function Composition({
           >
             <Card id={id} />
             <button className="inspect" onClick={() => inspect(id)}>
-              <Expand size={13} /> Карта {id}
+              <Expand size={13} /> {t("composition.card", { id })}
             </button>
           </div>
         );
@@ -2635,6 +2781,7 @@ function Composition({
   );
 }
 function Timer({ seconds, onEnd }: { seconds: number; onEnd?: () => void }) {
+  const { t } = useI18n();
   const [left, setLeft] = useState(seconds);
   const [running, setRunning] = useState(false);
   useEffect(() => {
@@ -2643,7 +2790,7 @@ function Timer({ seconds, onEnd }: { seconds: number; onEnd?: () => void }) {
   }, [seconds]);
   useEffect(() => {
     if (!running) return;
-    const t = setInterval(
+    const interval = setInterval(
       () =>
         setLeft((l) => {
           if (l <= 1) {
@@ -2655,7 +2802,7 @@ function Timer({ seconds, onEnd }: { seconds: number; onEnd?: () => void }) {
         }),
       1000,
     );
-    return () => clearInterval(t);
+    return () => clearInterval(interval);
   }, [running, onEnd]);
   return (
     <div className="timer">
@@ -2668,7 +2815,7 @@ function Timer({ seconds, onEnd }: { seconds: number; onEnd?: () => void }) {
         disabled={left === 0}
         onClick={() => setRunning(!running)}
       >
-        {running ? "Пауза" : "Старт"}
+        {running ? t("timer.pause") : t("timer.start")}
       </button>
       <button
         className="text-button"
@@ -2678,7 +2825,7 @@ function Timer({ seconds, onEnd }: { seconds: number; onEnd?: () => void }) {
           onEnd?.();
         }}
       >
-        Приключи фазата
+        {t("timer.endPhase")}
       </button>
     </div>
   );
@@ -2696,14 +2843,15 @@ function Trade({
   const [bi, setBi] = useState(0);
   const [yes, setYes] = useState([false, false]);
   const reset = () => setYes([false, false]);
+  const { t } = useI18n();
   return (
     <section className="paper">
-      <h2>Предложи размяна</h2>
+      <h2>{t("trade.title")}</h2>
       <div className="row">
         {[0, 1].map((_, i) => (
           <div key={i}>
             <label>
-              Участник{" "}
+              {t("trade.participant")}{" "}
               <select
                 value={i ? b : a}
                 onChange={(e) => {
@@ -2719,7 +2867,7 @@ function Trade({
               </select>
             </label>
             <label>
-              Карта{" "}
+              {t("trade.card")}{" "}
               <select
                 value={i ? bi : ai}
                 onChange={(e) => {
@@ -2729,7 +2877,7 @@ function Trade({
               >
                 {hands[i ? b : a]?.map((id, j) => (
                   <option key={id} value={j}>
-                    № {id}
+                    {t("trade.cardNumber", { id })}
                   </option>
                 ))}
               </select>
@@ -2742,7 +2890,7 @@ function Trade({
                   setYes(yes.map((v, j) => (j === i ? e.target.checked : v)))
                 }
               />{" "}
-              Съгласен съм
+              {t("trade.agree")}
             </label>
           </div>
         ))}
@@ -2755,12 +2903,9 @@ function Trade({
           reset();
         }}
       >
-        Размени двете карти
+        {t("trade.swap")}
       </button>
-      <p>
-        Размяната става само със съгласието и на двамата. Всеки запазва точно
-        три карти.
-      </p>
+      <p>{t("trade.rule")}</p>
     </section>
   );
 }
@@ -2786,6 +2931,7 @@ function GuessGame({
   finish,
   kids,
 }: GuessProps) {
+  const { t } = useI18n();
   const assoc = base === "associations";
   const detective = base === "detective";
   const cards = assoc ? s.order : s.selected;
@@ -2830,10 +2976,10 @@ function GuessGame({
         {people()}
         <p>
           {assoc
-            ? "Личните ръце се разглеждат последователно. Подайте устройството на активния участник."
+            ? t("guess.introAssociations")
             : detective
-              ? "Шест карти. Детективът избира една тайно и подготвя три видими детайла като улики."
-              : "Избраният образ се пресъздава без думи или звуци. Останалите отгатват след представянето."}
+              ? t("guess.introDetective")
+              : t("guess.introMime")}
         </p>
         <button
           className="primary"
@@ -2847,7 +2993,7 @@ function GuessGame({
               });
           }}
         >
-          Подготви кръга <ArrowRight size={16} />
+          {t("guess.prepare")} <ArrowRight size={16} />
         </button>
       </>
     );
@@ -2857,19 +3003,17 @@ function GuessGame({
       <>
         <h2>
           {assoc
-            ? `Участник ${current + 1}${current === storyteller ? " · Разказвач" : ""}`
+            ? t("guess.participant", { n: current + 1 }) +
+              (current === storyteller ? " · " + t("guess.storyteller") : "")
             : detective
-              ? "Само детективът гледа"
-              : "Само представящият гледа"}{" "}
-          · Личен избор
+              ? t("guess.detectiveOnly")
+              : t("guess.presenterOnly")}{" "}
+          · {t("guess.privateChoice")}
         </h2>
-        <p>
-          Другите участници отвръщат поглед. Затворете личния изглед преди да
-          подадете устройството.
-        </p>
+        <p>{t("guess.lookAway")}</p>
         {!privateOpen ? (
           <button className="primary" onClick={() => setPrivateOpen(true)}>
-            Отвори личния изглед
+            {t("guess.openPrivate")}
           </button>
         ) : (
           <>
@@ -2897,13 +3041,13 @@ function GuessGame({
             </div>
             {assoc &&
               current === storyteller &&
-              field("Подсказка", "Дай дума или кратка фраза като подсказка")}
+              field("Подсказка", t("guess.hintLabel"))}
             {assoc && current !== storyteller && (
-              <h2>Подсказка: {s.answers["Подсказка"]}</h2>
+              <h2>{t("guess.hint", { hint: s.answers["Подсказка"] ?? "" })}</h2>
             )}
             {detective &&
               [1, 2, 3].map((i) =>
-                field("Улика_" + i, `Улика ${i}: видим детайл`),
+                field("Улика_" + i, t("guess.clueLabel", { n: i })),
               )}
             <button
               className="primary"
@@ -2928,7 +3072,7 @@ function GuessGame({
                   });
               }}
             >
-              Скрий и потвърди избора
+              {t("guess.confirmChoice")}
             </button>
           </>
         )}
@@ -2939,10 +3083,10 @@ function GuessGame({
     <>
       <h2>
         {assoc
-          ? `Подсказка: ${s.answers["Подсказка"]}`
+          ? t("guess.hint", { hint: s.answers["Подсказка"] ?? "" })
           : detective
-            ? "Следвайте уликите"
-            : "Представяне без думи"}
+            ? t("guess.followClues")
+            : t("guess.mimeTitle")}
       </h2>
       <div className="row">
         {cards.map((id) => (
@@ -2956,30 +3100,33 @@ function GuessGame({
       </div>
       {!assoc && !detective && s.stage === 2 ? (
         <>
-          <p>Една минута за подготовка, после една минута за представяне.</p>
+          <p>{t("guess.mimeTiming")}</p>
           <Timer seconds={60} />
           <button className="primary" onClick={() => update({ stage: 3 })}>
-            Към отгатването
+            {t("guess.toGuessing")}
           </button>
         </>
       ) : (
         <>
           {detective && (
             <div className="paper">
-              <p className="eyebrow">УЛИКА {s.turn + 1} / 3</p>
+              <p className="eyebrow">
+                {t("guess.clueEyebrow", { n: s.turn + 1 })}
+              </p>
               <h2>{s.answers["Улика_" + (s.turn + 1)]}</h2>
             </div>
           )}
           {!s.revealed && s.guesses.length < s.people - 1 ? (
             <>
               <h3>
-                Наблюдател{" "}
-                {assoc
-                  ? Array.from({ length: s.people }, (_, i) => i).filter(
-                      (i) => i !== storyteller,
-                    )[s.guesses.length] + 1
-                  : (((s.round % s.people) + s.guesses.length) % s.people) + 1}
-                : избери и заключи предположението си.
+                {t("guess.observer", {
+                  n: assoc
+                    ? Array.from({ length: s.people }, (_, i) => i).filter(
+                        (i) => i !== storyteller,
+                      )[s.guesses.length] + 1
+                    : (((s.round % s.people) + s.guesses.length) % s.people) +
+                      1,
+                })}
               </h3>
               <div className="row">
                 {cards.map((id) => (
@@ -2992,7 +3139,7 @@ function GuessGame({
               </div>
               {field(
                 "Причина_" + s.round + "_" + s.guesses.length,
-                "Какво те насочи? (по желание)",
+                t("guess.reasonLabel"),
               )}
             </>
           ) : !s.revealed ? (
@@ -3002,31 +3149,35 @@ function GuessGame({
                   className="secondary"
                   onClick={() => update({ turn: s.turn + 1, guesses: [] })}
                 >
-                  Следваща улика
+                  {t("guess.nextClue")}
                 </button>
               )}
               <button
                 className="primary"
                 onClick={() => update({ revealed: true })}
               >
-                Разкрий картата
+                {t("guess.reveal")}
               </button>
             </div>
           ) : (
             <>
-              <h2>Избраната карта</h2>
+              <h2>{t("guess.chosenCard")}</h2>
               <Card id={s.secret} large onClick={() => inspect(s.secret)} />
               <p>
-                Предположения: {s.guesses.map((id) => `№ ${id}`).join(", ")}
+                {t("guess.guesses", {
+                  list: s.guesses
+                    .map((id) => t("guess.cardNumber", { id }))
+                    .join(", "),
+                })}
               </p>
               {field(
                 "Замисъл_" + s.round,
                 detective
-                  ? "Посочи трите детайла. Кое беше по-лесно: да измисляте улики или да познавате?"
-                  : "Какво искаше да предадеш? Какво забелязахте?",
+                  ? t("guess.intentDetective")
+                  : t("guess.intentMime"),
               )}
               <button className="secondary" onClick={roundNext}>
-                Следващ участник · нов кръг
+                {t("guess.nextRound")}
               </button>
               {finish()}
             </>
@@ -3047,6 +3198,7 @@ function Drawing({
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const active = useRef(false);
+  const { t } = useI18n();
   const [color, setColor] = useState("#b54a38");
   const [width, setWidth] = useState(5);
   useEffect(() => {
@@ -3076,13 +3228,13 @@ function Drawing({
     <>
       <div className="drawing-tools">
         <input
-          aria-label="Цвят на молива"
+          aria-label={t("drawing.color")}
           type="color"
           value={color}
           onChange={(e) => setColor(e.target.value)}
         />
         <label>
-          Дебелина{" "}
+          {t("drawing.thickness")}{" "}
           <input
             type="range"
             min="2"
@@ -3095,7 +3247,7 @@ function Drawing({
           className="secondary"
           onClick={() => onChange(strokes.slice(0, -1))}
         >
-          Отмени линия
+          {t("drawing.undo")}
         </button>
       </div>
       <div className="drawing">
@@ -3124,14 +3276,16 @@ function Drawing({
             active.current = false;
           }}
         />
-        <img src={cardSrc(id)} alt="Картата остава непроменена" />
+        <img src={cardSrc(id)} alt={t("drawing.alt")} />
       </div>
     </>
   );
 }
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <I18nProvider>
+      <App />
+    </I18nProvider>
   </React.StrictMode>,
 );
 function Adapted({
@@ -3153,6 +3307,8 @@ function Adapted({
   finish: () => React.ReactNode;
   cards: number[];
 }) {
+  const { t, tList } = useI18n();
+  const bridgeSteps = tList("adapted.bridgeSteps");
   const base = ex.id.split("-")[0];
   const count = ex.category === 1 ? 2 : s.people;
   const need =
@@ -3173,11 +3329,11 @@ function Adapted({
         {ex.category !== 1 && people()}
         {["bridge", "future"].includes(base) && (
           <label className="field">
-            Съгласувана обща тема
+            {t("adapted.topicLabel")}
             <input
               value={s.topic}
               onChange={(e) => update({ topic: e.target.value })}
-              placeholder="Какво желаете да изследвате заедно?"
+              placeholder={t("adapted.topicPlaceholder")}
             />
           </label>
         )}
@@ -3186,7 +3342,7 @@ function Adapted({
           disabled={["bridge", "future"].includes(base) && !s.topic.trim()}
           onClick={begin}
         >
-          Започнете заедно
+          {t("adapted.start")}
         </button>
       </>
     );
@@ -3194,16 +3350,14 @@ function Adapted({
     return (
       <>
         <h2>
-          Участник {s.turn + 1} ·{" "}
+          {t("adapted.participant", { n: s.turn + 1 })} ·{" "}
           {base === "now" && ex.category === 1
             ? s.selected.length === 0
-              ? "Карта за моето състояние"
-              : "Карта за нашето общуване"
+              ? t("adapted.cardMyState")
+              : t("adapted.cardOurCommunication")
             : base === "bridge"
-              ? ["Къде съм сега", "Къде искам да бъда", "Какво ще ми помогне"][
-                  s.selected.length
-                ]
-              : "Избери своите изображения"}
+              ? bridgeSteps[s.selected.length]
+              : t("adapted.chooseImages")}
         </h2>
         <div className="spread">
           {cards.map((id) => (
@@ -3226,12 +3380,15 @@ function Adapted({
         </div>
         {peek > 0 && (
           <button className="secondary" onClick={() => inspect(peek)}>
-            Разгледай избраната карта отблизо
+            {t("adapted.inspectSelected")}
           </button>
         )}
         <p>
-          {s.selected.length} избрани · {need}
-          {base === "future" ? "–7" : ""} карти за този участник
+          {t("adapted.selectedCount", {
+            count: base === "future" ? 7 : need,
+            selected: s.selected.length,
+            need: base === "future" ? need + "–7" : need,
+          })}
         </p>
         <button
           className="primary"
@@ -3246,7 +3403,9 @@ function Adapted({
             });
           }}
         >
-          Потвърди · {s.turn + 1 < count ? "следващ участник" : "споделяне"}
+          {s.turn + 1 < count
+            ? t("adapted.confirmNext")
+            : t("adapted.confirmShare")}
         </button>
       </>
     );
@@ -3254,7 +3413,7 @@ function Adapted({
     <>
       {base === "future" ? (
         <>
-          <h2>Нашата обща картина · {s.topic}</h2>
+          <h2>{t("adapted.futureTitle", { topic: s.topic })}</h2>
           <Composition
             ids={Array.from(new Set(s.selected))}
             positions={s.positions}
@@ -3263,29 +3422,21 @@ function Adapted({
           />
           {field(
             "Общо_бъдеще",
-            "Къде желанията ни се срещат? Как различията намират място?",
+            t("adapted.futureMeet"),
           )}
-          {field("Заглавие", "Как ще се казва общата ни картина?")}
+          {field("Заглавие", t("adapted.futureName"))}
         </>
       ) : base === "bridge" ? (
         <>
           {s.hands.map((h, i) => (
             <section className="paper" key={i}>
-              <h2>Мостът на участник {i + 1}</h2>
+              <h2>{t("adapted.bridgeOf", { n: i + 1 })}</h2>
               <div className="bridge">
                 {[0, 2, 1].map((j) => (
                   <div key={j}>
-                    <h3>
-                      {
-                        [
-                          "Къде съм сега",
-                          "Къде искам да бъда",
-                          "Какво ще ми помогне",
-                        ][j]
-                      }
-                    </h3>
+                    <h3>{bridgeSteps[j]}</h3>
                     <Card id={h[j]} onClick={() => inspect(h[j])} />
-                    {field(`Мост_${i}_${j}`, "Какво виждам в този образ?")}
+                    {field(`Мост_${i}_${j}`, t("adapted.seeInImage"))}
                   </div>
                 ))}
               </div>
@@ -3293,7 +3444,7 @@ function Adapted({
           ))}
           {field(
             "Сравнение",
-            "Кои възможности са полезни за всички? Какво е сходно и различно?",
+            t("adapted.compare"),
           )}
         </>
       ) : base === "perspective" ? (
@@ -3305,24 +3456,21 @@ function Adapted({
           />
           {field(
             "Проблем_" + s.turn,
-            `Участник ${s.turn + 1}: какъв въображаем проблем подсказва образът?`,
+            t("adapted.problem", { n: s.turn + 1 }),
           )}
           {s.hands.map(
             (_, i) =>
               i !== s.turn &&
               field(
                 `Решение_${s.turn}_${i}`,
-                `Участник ${i + 1}: решение и детайлът, който го подсказва`,
+                t("adapted.solution", { n: i + 1 }),
               ),
           )}
-          {field(
-            "Условия_" + s.turn,
-            "При какви условия биха били полезни предложените решения?",
-          )}
+          {field("Условия_" + s.turn, t("adapted.conditions"))}
         </>
       ) : base === "coffee" ? (
         <>
-          <h2>Разказва участник {s.turn + 1}. Следващият слуша и обобщава.</h2>
+          <h2>{t("adapted.coffeeTitle", { n: s.turn + 1 })}</h2>
           <Card
             id={s.hands[s.turn][0]}
             large
@@ -3330,43 +3478,44 @@ function Adapted({
           />
           {field(
             "Разказ_" + s.turn,
-            "Какво те привлече и какви асоциации събуди картата?",
+            t("adapted.story"),
           )}
           {field(
             "Слушател_" + s.turn,
-            `Участник ${((s.turn + 1) % count) + 1}: Разбирам, че… Правилно ли те разбрах?`,
+            t("adapted.listener", { n: ((s.turn + 1) % count) + 1 }),
           )}
-          {field(
-            "Потвърждение_" + s.turn,
-            "Потвърждение, допълнение или поправка",
-          )}
+          {field("Потвърждение_" + s.turn, t("adapted.confirmation"))}
         </>
       ) : (
         <>
           <div className="participants">
             {s.hands.map((h, i) => (
               <section className="paper" key={i}>
-                <h2>Участник {i + 1}</h2>
+                <h2>{t("adapted.participant", { n: i + 1 })}</h2>
                 <div className="row">
                   {h.map((id, j) => (
                     <div key={j}>
                       <Card id={id} onClick={() => inspect(id)} />
-                      <p>{j === 0 ? "Моето състояние" : "Нашето общуване"}</p>
+                      <p>
+                        {j === 0
+                          ? t("adapted.myState")
+                          : t("adapted.ourCommunication")}
+                      </p>
                     </div>
                   ))}
                 </div>
                 {field(
                   "Състояние_" + i,
                   ex.category === 3
-                    ? "Днес се чувствам… Какво в картата ти напомня за това?"
-                    : "Какво в картата отразява моето състояние?",
+                    ? t("adapted.stateToday")
+                    : t("adapted.stateCard"),
                 )}
                 {ex.category === 1 &&
-                  field("Общуване_" + i, "Как преживявам нашето общуване?")}
+                  field("Общуване_" + i, t("adapted.communication"))}
               </section>
             ))}
           </div>
-          {field("Сходства", "Какво е сходно и различно в преживяванията ни?")}
+          {field("Сходства", t("adapted.similarities"))}
         </>
       )}
       {["coffee", "perspective"].includes(base) && s.turn + 1 < count && (
@@ -3374,7 +3523,7 @@ function Adapted({
           className="primary"
           onClick={() => update({ turn: s.turn + 1 })}
         >
-          Следващ участник
+          {t("adapted.nextParticipant")}
         </button>
       )}
       {finish()}

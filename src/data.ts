@@ -1,3 +1,4 @@
+// Exercise structure only; all text lives in src/locales/*.json.
 export type Exercise = {
   id: string;
   title: string;
@@ -11,362 +12,95 @@ export type Exercise = {
   page: number;
   adaptation?: string;
 };
-const row = (
-  id: string,
-  title: string,
-  category: number,
-  people: string,
-  time: string,
-  cards: string,
-  face: string,
-  description: string,
-  mechanic: string,
-  page: number,
-): Exercise => ({
-  id,
-  title,
-  category,
-  people,
-  time,
-  cards,
-  face,
-  description,
-  mechanic,
-  page,
-});
-export const categories = [
+type Translate = (key: string) => string;
+export const categoryIcons = ["person", "pair", "group", "child"];
+// minCards: the card count from an exercise's conditions (the upper end of a
+// range like "5–7"). A deck limit set in Settings can't go below it.
+// Exercises counted per person, per team or using the whole deck have none.
+const exerciseMeta: {
+  id: string;
+  category: number;
+  page: number;
+  minCards?: number;
+}[] = [
+  { id: "now", category: 0, page: 49, minCards: 1 },
+  { id: "bridge", category: 0, page: 51, minCards: 3 },
+  { id: "future", category: 0, page: 53, minCards: 7 },
+  { id: "essence", category: 0, page: 55 },
+  { id: "challenge", category: 0, page: 57, minCards: 1 },
+  { id: "why", category: 0, page: 59, minCards: 5 },
+  { id: "dialogue", category: 0, page: 61, minCards: 1 },
+  { id: "coffee", category: 1, page: 67 },
+  { id: "story", category: 1, page: 69, minCards: 8 },
+  { id: "perspective", category: 1, page: 71 },
+  { id: "cluster", category: 2, page: 77 },
+  { id: "market", category: 2, page: 79 },
+  { id: "mime", category: 2, page: 81, minCards: 8 },
+  { id: "trust", category: 2, page: 83 },
+  { id: "words", category: 2, page: 85 },
+  { id: "associations", category: 2, page: 87 },
+  { id: "mission", category: 2, page: 89 },
+  { id: "detective", category: 3, page: 97, minCards: 6 },
+  { id: "draw", category: 3, page: 99 },
+  { id: "gift", category: 3, page: 101 },
+  { id: "feelings", category: 3, page: 103 },
+];
+// Adapted variants of base exercises, listed under another category.
+const variants = [
+  { suffix: "pair", category: 1, ids: exerciseMeta.slice(0, 7).map((m) => m.id) },
   {
-    title: "Самостоятелна работа",
-    sub: "Време за себе си",
-    text: "Опознай себе си, подреди мислите си и намери нови гледни точки.",
-    icon: "person",
+    suffix: "group",
+    category: 2,
+    ids: ["now", "coffee", "story", "perspective", "bridge", "future"],
   },
   {
-    title: "По двойки",
-    sub: "Пространство за двама",
-    text: "По-дълбоки разговори, активно слушане и взаимно разбиране.",
-    icon: "pair",
-  },
-  {
-    title: "В група",
-    sub: "Откриваме заедно",
-    text: "Идеи за екипи, общи истории и споделени преживявания.",
-    icon: "group",
-  },
-  {
-    title: "С деца",
-    sub: "Свят на въображение",
-    text: "Творчески и забавни упражнения за развитие и общуване.",
-    icon: "child",
+    suffix: "kids",
+    category: 3,
+    ids: ["now", "story", "cluster", "mime", "words", "associations", "mission"],
   },
 ];
-export const exercises: Exercise[] = [
-  row(
-    "now",
-    "Тук и сега",
-    0,
-    "1 човек",
-    "10–15 мин",
-    "1 карта",
-    "Открити",
-    "Свържи се с настоящия момент чрез образ, който те привлича.",
-    "Избор и размисъл",
-    49,
-  ),
-  row(
-    "bridge",
-    "Мостът",
-    0,
-    "1 човек",
-    "15–20 мин",
-    "3 карти",
-    "Скрити",
-    "Изследвай къде си, къде искаш да бъдеш и какво ще ти помогне.",
-    "Три карти в пространството",
-    51,
-  ),
-  row(
-    "future",
-    "Картина на бъдещето",
-    0,
-    "1 човек",
-    "15–20 мин",
-    "5–7 карти",
-    "Открити",
-    "Създай и подреди своя визуална картина на желаното бъдеще.",
-    "Свободна композиция",
-    53,
-  ),
-  row(
-    "essence",
-    "До същността",
-    0,
-    "1 човек",
-    "15–20 мин",
-    "Цяло тесте",
-    "Скрити → открити",
-    "Избирай по една от три карти, докато остане най-същественото.",
-    "Постепенно редуциране",
-    55,
-  ),
-  row(
-    "challenge",
-    "Предизвикай се",
-    0,
-    "1 човек",
-    "10–15 мин",
-    "1 карта",
-    "Открити",
-    "Дай внимание на образа, който най-малко би искал да избереш.",
-    "Промяна на перспективата",
-    57,
-  ),
-  row(
-    "why",
-    "Пет защо",
-    0,
-    "1 човек",
-    "15–20 мин",
-    "5 карти",
-    "Скрити",
-    "Всеки нов въпрос започва от последния ти отговор.",
-    "Последователна верига",
-    59,
-  ),
-  row(
-    "dialogue",
-    "Диалог с карта",
-    0,
-    "1 човек",
-    "20–30 мин",
-    "1 карта",
-    "Скрита",
-    "Напиши въображаем разговор. Ти пишеш и от двете страни.",
-    "Писмен диалог",
-    61,
-  ),
-  row(
-    "coffee",
-    "На кафе",
-    1,
-    "2 души",
-    "15–20 мин",
-    "По 1 карта",
-    "Открити",
-    "Споделете асоциации и упражнете внимателното слушане.",
-    "Разказ и обобщение",
-    67,
-  ),
-  row(
-    "story",
-    "Имало едно време",
-    1,
-    "2 души",
-    "15–20 мин",
-    "8 карти",
-    "Скрити",
-    "Редувайте се и създайте история с неочаквани обрати.",
-    "Обща история",
-    69,
-  ),
-  row(
-    "perspective",
-    "Въпрос на гледна точка",
-    1,
-    "2 души",
-    "15–20 мин",
-    "По 1 на кръг",
-    "Скрити",
-    "Един образ подсказва проблем на единия и решение на другия.",
-    "Проблем и решение",
-    71,
-  ),
-  row(
-    "cluster",
-    "Намери своите",
-    2,
-    "6–20 души",
-    "15–20 мин",
-    "По 1 карта",
-    "Раздадени",
-    "Открийте връзките между изображенията и образувайте групи без думи.",
-    "Безмълвно групиране",
-    77,
-  ),
-  row(
-    "market",
-    "Пазар на ценности",
-    2,
-    "6–20 души",
-    "25–35 мин",
-    "По 3 карти",
-    "Раздадени",
-    "Назовете лични ценности, договорете размени и създайте общо събитие.",
-    "Размяна по взаимно съгласие",
-    79,
-  ),
-  row(
-    "mime",
-    "Без думи",
-    2,
-    "3–12 души",
-    "20–25 мин",
-    "6–8 карти",
-    "Открити",
-    "Представете тайно избрана карта чрез движения, поза и мимика.",
-    "Представяне и отгатване",
-    81,
-  ),
-  row(
-    "trust",
-    "Кръг на доверие",
-    2,
-    "5–20 души",
-    "30–35 мин",
-    "По 2 карти",
-    "Открити",
-    "Чуйте различни асоциации, без да е нужно да споделяте личната тема.",
-    "Кръг за споделяне",
-    83,
-  ),
-  row(
-    "words",
-    "С друга дума",
-    2,
-    "3–20 души",
-    "30–40 мин",
-    "По 1 карта",
-    "Скрити",
-    "Картите остават на място. Думите пътуват наляво.",
-    "Ротация на думи",
-    85,
-  ),
-  row(
-    "associations",
-    "Асоциации",
-    2,
-    "4–8 души",
-    "25–35 мин",
-    "По 5 карти",
-    "Лични ръце",
-    "Подсказка, тайни избори и откриване на асоциацията на разказвача.",
-    "Избор, разбъркване, отгатване",
-    87,
-  ),
-  row(
-    "mission",
-    "На мисия",
-    2,
-    "6–20 души",
-    "30–40 мин",
-    "3 на отбор",
-    "Скрити",
-    "Случайните образи вдъхновяват идеи за общо предизвикателство.",
-    "Отборна работилница",
-    89,
-  ),
-  row(
-    "detective",
-    "Детективи",
-    3,
-    "3+ деца",
-    "15–20 мин",
-    "6 карти",
-    "Открити",
-    "Три видими детайла стават улики за тайно избрана карта.",
-    "Улики и отгатване",
-    97,
-  ),
-  row(
-    "draw",
-    "Дорисувай",
-    3,
-    "1+ дете",
-    "20–30 мин",
-    "По 1 карта",
-    "Открити",
-    "Представи си света отвъд краищата на картата и го нарисувай.",
-    "Рисуване около изображение",
-    99,
-  ),
-  row(
-    "gift",
-    "Подарък",
-    3,
-    "3+ деца",
-    "15–20 мин",
-    "По 1 карта",
-    "Открити",
-    "Избери символичен подарък, като помислиш какво радва другото дете.",
-    "Жребий и подаряване",
-    101,
-  ),
-  row(
-    "feelings",
-    "Аз чувствам",
-    3,
-    "3+ деца",
-    "15–20 мин",
-    "По 1 карта",
-    "Скрити",
-    "Подредете изображенията при чувствата, с които ги свързвате.",
-    "Групиране по чувства",
-    103,
-  ),
-];
-export const adaptations: Exercise[] = [
-  ...exercises
-    .slice(0, 7)
-    .map((e) => ({
-      ...e,
-      id: e.id + "-pair",
-      category: 1,
-      people: "2 души",
-      adaptation:
-        e.id === "now"
-          ? "Всеки избира карта за своето състояние и втора за общуването помежду ви."
-          : e.id === "bridge"
-            ? "Съгласувайте обща тема. Всеки създава собствен мост; накрая сравнете."
-            : e.id === "future"
-              ? "Изберете карти за общо бъдеще и ги обединете в една композиция."
-              : "Участник и наблюдател. Наблюдателят слуша, без да тълкува, избира или дава решения.",
-    })),
-  ...exercises
-    .filter((e) =>
-      ["now", "coffee", "story", "perspective", "bridge", "future"].includes(
-        e.id,
-      ),
-    )
-    .map((e) => ({
-      ...e,
-      id: e.id + "-group",
-      category: 2,
-      people: "3+ души",
-      adaptation:
-        "Споделяйте последователно в кръг. За мост и бъдеще използвайте само обща, съгласувана тема.",
-    })),
-  ...exercises
-    .filter((e) =>
-      [
-        "now",
-        "story",
-        "cluster",
-        "mime",
-        "words",
-        "associations",
-        "mission",
-      ].includes(e.id),
-    )
-    .map((e) => ({
-      ...e,
-      id: e.id + "-kids",
-      category: 3,
-      people: "3+ деца",
-      adaptation:
-        "Кратки, ясни въпроси. Детето може да пропусне реда си. Всеки сам определя значението на картата.",
-    })),
-];
-export const library = [...exercises, ...adaptations];
+export const minCards: Record<string, number> = Object.fromEntries(
+  exerciseMeta.flatMap((m) => (m.minCards ? [[m.id, m.minCards]] : [])),
+);
+export function buildCategories(t: Translate) {
+  return categoryIcons.map((icon, i) => ({
+    icon,
+    title: t(`categories.${i}.title`),
+    sub: t(`categories.${i}.sub`),
+    text: t(`categories.${i}.text`),
+  }));
+}
+export function buildLibrary(t: Translate) {
+  const exercises: Exercise[] = exerciseMeta.map(({ id, category, page }) => ({
+    id,
+    category,
+    page,
+    title: t(`exercises.${id}.title`),
+    people: t(`exercises.${id}.people`),
+    time: t(`exercises.${id}.time`),
+    cards: t(`exercises.${id}.cards`),
+    face: t(`exercises.${id}.face`),
+    description: t(`exercises.${id}.description`),
+    mechanic: t(`exercises.${id}.mechanic`),
+  }));
+  const adaptations = variants.flatMap((v) =>
+    exercises
+      .filter((e) => v.ids.includes(e.id))
+      .map((e) => {
+        const own = `variants.${v.suffix}.adaptation.${e.id}`;
+        const text = t(own);
+        return {
+          ...e,
+          id: `${e.id}-${v.suffix}`,
+          category: v.category,
+          people: t(`variants.${v.suffix}.people`),
+          adaptation:
+            text === own ? t(`variants.${v.suffix}.adaptation.default`) : text,
+        };
+      }),
+  );
+  return { exercises, library: [...exercises, ...adaptations] };
+}
 // Card ids are numbers: each deck owns a block of 1000 (Diarc 1–55,
 // Pictus 1001–1036, Yoko 2001–2015), so ids stay stable as decks are added.
 const deckDefs = [

@@ -229,7 +229,7 @@ function App() {
               alt=""
             />
             <span>
-              {t("brand.line1")}<br />
+              {t("brand.line1")}
               <b>{t("brand.line2")}</b>
             </span>
           </Link>

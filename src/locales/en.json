@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "Working with Metaphorical Cards",
+    "title": "MetaCards",
     "language": "Language"
   },
   "common": {
@@ -248,8 +248,8 @@
     }
   },
   "brand": {
-    "line1": "Working with",
-    "line2": "metaphorical cards",
+    "line1": "Meta",
+    "line2": "Cards",
     "tagline1": "Inspiration",
     "tagline2": "for deeper conversations",
     "book": "Based on the book by Yana Avramova",
